@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /**
- * pearls — an agent-friendly CLI wrapper around the Pi `todo` extension.
+ * pearls — an agent-friendly CLI wrapper around Armin Ronacher's `todos.ts`.
+ *
+ * The CLI is deliberately agent-agnostic: any tool that can run a shell
+ * command (Claude Code, Cursor, Aider, Codex, a plain bash agent, a human)
+ * can manage todos through pearls. If Pi happens to be running too, its
+ * `/todos` UI operates on the same files, but pearls does not depend on
+ * Pi being present at runtime.
  *
  * Storage is 100% compatible with `extensions/todo.ts`: both read and write
  * the same `.pi/todos/<id>.md` files with JSON front matter, honour
- * `PI_TODO_PATH`, respect lock files, and share a settings.json. That means
- * a human can run `pearls` on the command line while an agent in Pi uses
- * the `todo` tool against the same directory.
+ * `PI_TODO_PATH`, respect lock files, and share a settings.json.
  *
  * Every operation here is implemented by calling a function that already
  * exists in todo.ts — no business logic is reimplemented. The CLI only
@@ -43,7 +47,7 @@ import {
 	writeTodoFile,
 	type TodoFrontMatter,
 	type TodoRecord,
-} from "./todo.js";
+} from "./todo-wrapper.js";
 
 // ---------------------------------------------------------------------------
 // Stub ExtensionContext
@@ -258,7 +262,8 @@ GLOBAL FLAGS
                          $PI_TODO_PATH). Exported as PI_TODO_PATH for todo.ts.
   --session <id>         Session id used for claim/release (default:
                          $PEARLS_SESSION or cli:<user>@<host>).
-  --json                 Emit JSON in the same shape Pi's todo tool returns.
+  --json                 Emit stable JSON (identical to Pi's todo tool output),
+                         suitable for any agent that parses tool results.
   --no-gc                Skip the normal startup garbage collection of old
                          closed todos.
   -h, --help             Show this help.
@@ -289,9 +294,9 @@ COMMANDS
 
 OUTPUT
   Human mode is the default and matches the "Assigned / Open / Closed"
-  sections that the Pi tool renders internally. --json produces the exact
-  JSON payload an agent sees through the Pi tool, so a shell-using agent
-  can parse pearls output the same way.
+  sections used by the underlying todo tool. --json produces a stable
+  JSON payload (the same one Pi's todo tool returns to an LLM), so any
+  agent that can run a shell command can parse pearls output directly.
 
 EXAMPLES
   pearls create "Write README" --tag docs --body "Explain storage format"
