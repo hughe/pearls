@@ -137,6 +137,13 @@ out="$(pearls help)"
 assert_contains "$out" "pearls — agent-friendly todos" "help prints banner"
 assert_contains "$out" "create <title...>" "help lists create command"
 assert_contains "$out" "--json" "help documents --json"
+assert_contains "$out" "quickstart" "help lists quickstart command"
+
+section "quickstart"
+out="$(pearls quickstart)"
+assert_contains "$out" "agent's guide" "quickstart prints banner"
+assert_contains "$out" "pearls claim" "quickstart shows the claim step"
+assert_contains "$out" "--json" "quickstart mentions --json output"
 
 section "dir command before any todos"
 out="$(pearls dir)"

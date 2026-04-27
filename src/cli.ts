@@ -296,6 +296,7 @@ COMMANDS
                          to release someone else's.
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
+  quickstart             Print an agent-oriented guide to using pearls.
   help                   Show this help.
 
 OUTPUT
@@ -312,6 +313,72 @@ EXAMPLES
   pearls append TODO-deadbeef --stdin-body < notes.md
   pearls close TODO-deadbeef
   PI_TODO_PATH=./todos pearls list
+`;
+
+const QUICKSTART = `pearls quickstart — an agent's guide to driving the todo list
+
+WHAT THIS IS
+  pearls is a CLI for a shared todo backlog living in .pi/todos/<id>.md.
+  Files are committed to the repo, so humans and agents on every checkout
+  see the same list. Any agent that can run a shell command can use it.
+
+THE TYPICAL LOOP
+  1. Discover work:
+       pearls list --json
+     The JSON has three buckets: assigned (claimed by some session),
+     open (unclaimed), and closed. Pick something from open, or pick
+     up something already assigned to your own session.
+
+  2. Claim it so other agents don't double up:
+       pearls claim TODO-<id> --session "$AGENT_ID"
+     Use a stable session id per agent run; pearls also reads
+     $PEARLS_SESSION. Add --force to steal a stale claim.
+
+  3. Do the work. Record progress as you go:
+       pearls append TODO-<id> --stdin-body <<'EOF'
+       Tried X, hit Y, switching to Z.
+       EOF
+
+  4. Finish:
+       pearls close TODO-<id>
+     close clears the assignment automatically.
+
+CREATING WORK
+  pearls create "Short imperative title" \\
+    --tag area --tag kind \\
+    --stdin-body <<'EOF'
+  Why this matters, what 'done' looks like, links to context.
+  EOF
+
+  Keep titles short and imperative. Put detail in the body — agents and
+  humans both read it. Tags are free-form; reuse what's already in use
+  (check 'pearls list --json' to see existing tags).
+
+INSPECTING / SEARCHING
+  pearls get TODO-<id>            # full body
+  pearls search <query>           # fuzzy match across id/title/tags/status
+  pearls search <query> --closed  # include closed todos
+  pearls list-all                 # everything, including closed
+
+IDS
+  Ids are written as TODO-<hex> in output, but every command also accepts
+  the bare <hex>. Copy-paste either form.
+
+OUTPUT FOR AGENTS
+  Add --json to list / search / get / create / update for a stable
+  machine-readable payload. The shape matches Pi's /todos tool exactly,
+  so any code that already parses Pi tool output works here unchanged.
+
+WHAT NOT TO DO
+  - Don't edit .pi/todos/*.md by hand while pearls is running; the lock
+    files (.lock) coordinate concurrent writers.
+  - Don't reuse another session's id to bypass claim/release; use --force
+    if you genuinely need to steal, so the audit trail is honest.
+  - Don't delete todos to "close" them — use 'pearls close'. Deletes are
+    for mistakes only.
+
+SEE ALSO
+  pearls help     full command reference and global flags
 `;
 
 // ---------------------------------------------------------------------------
@@ -403,6 +470,9 @@ async function main(argv: string[]): Promise<void> {
 			return;
 		case "path":
 			return cmdPath(run);
+		case "quickstart":
+			process.stdout.write(QUICKSTART);
+			return;
 		default:
 			fail(`Unknown command: ${parsed.command}. Try 'pearls help'.`, 2);
 	}
