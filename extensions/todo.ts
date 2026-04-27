@@ -216,6 +216,9 @@ function sortTodos(todos: TodoFrontMatter[]): TodoFrontMatter[] {
 		const aAssigned = !aClosed && Boolean(a.assigned_to_session);
 		const bAssigned = !bClosed && Boolean(b.assigned_to_session);
 		if (aAssigned !== bAssigned) return aAssigned ? -1 : 1;
+		const aPri = a.priority ?? Number.POSITIVE_INFINITY;
+		const bPri = b.priority ?? Number.POSITIVE_INFINITY;
+		if (aPri !== bPri) return aPri - bPri;
 		return (a.created_at || "").localeCompare(b.created_at || "");
 	});
 }
@@ -1162,9 +1165,13 @@ function renderAssignmentSuffix(
 	return theme.fg(color, ` (assigned: ${todo.assigned_to_session}${suffix})`);
 }
 
+function formatPriorityTag(todo: TodoFrontMatter): string {
+	return todo.priority !== undefined ? ` [P${todo.priority}]` : "";
+}
+
 function formatTodoHeading(todo: TodoFrontMatter): string {
 	const tagText = todo.tags.length ? ` [${todo.tags.join(", ")}]` : "";
-	return `${formatTodoId(todo.id)} ${getTodoTitle(todo)}${tagText}${formatAssignmentSuffix(todo)}`;
+	return `${formatTodoId(todo.id)}${formatPriorityTag(todo)} ${getTodoTitle(todo)}${tagText}${formatAssignmentSuffix(todo)}`;
 }
 
 function buildRefinePrompt(todoId: string, title: string): string {
@@ -1241,10 +1248,15 @@ export function serializeTodoListForAgent(todos: TodoFrontMatter[]): string {
 function renderTodoHeading(theme: Theme, todo: TodoFrontMatter, currentSessionId?: string): string {
 	const closed = isTodoClosed(getTodoStatus(todo));
 	const titleColor = closed ? "dim" : "text";
+	const priorityText =
+		todo.priority !== undefined
+			? theme.fg("muted", ` [P${todo.priority}]`)
+			: "";
 	const tagText = todo.tags.length ? theme.fg("dim", ` [${todo.tags.join(", ")}]`) : "";
 	const assignmentText = renderAssignmentSuffix(theme, todo, currentSessionId);
 	return (
 		theme.fg("accent", formatTodoId(todo.id)) +
+		priorityText +
 		" " +
 		theme.fg(titleColor, getTodoTitle(todo)) +
 		tagText +
