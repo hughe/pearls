@@ -177,6 +177,8 @@ assert_eq "$first_char" "{" "file starts with JSON front matter"
 assert_contains "$(cat "$FILE")" "\"id\": \"$ID\"" "front matter contains id"
 assert_contains "$(cat "$FILE")" "\"title\": \"Write docs\"" "front matter contains title"
 assert_contains "$(cat "$FILE")" "Initial body." "body section present"
+assert_contains "$(cat "$FILE")" "# Write docs" "body starts with title heading"
+assert_contains "$(cat "$FILE")" "## Description" "body has Description subheading"
 
 section "create (--json shape)"
 out="$(pearls create "Second task" --tag qa --json)"
@@ -370,7 +372,8 @@ hit_id=$(printf '%s\n' "$out" | extract_id)
 out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
 assert_contains "$out" "status: closed" "closed beads issue maps to closed pearl"
 assert_contains "$out" "| Original ID | sldb-3l0 |" "body records original beads id"
-assert_contains "$out" "# Description" "body has Description header"
+assert_contains "$out" "# Don't use docker for CDK" "body has title heading"
+assert_contains "$out" "## Description" "body has Description subheading"
 assert_contains "$out" "Copy shared libs" "body includes description"
 assert_contains "$out" "[beads, task]" "tags include beads + issue_type"
 
