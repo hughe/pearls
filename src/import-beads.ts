@@ -109,8 +109,10 @@ function metaRow(label: string, value: unknown): string | undefined {
 
 function buildBody(issue: BeadsIssue): string {
 	const parts: string[] = [];
+	const title = (issue.title ?? "").trim();
+	if (title) parts.push("# " + title);
 	const description = (issue.description ?? "").trim();
-	if (description) parts.push("# Description\n\n" + description);
+	if (description) parts.push("## Description\n\n" + description);
 
 	const rows: string[] = [];
 	const push = (row: string | undefined) => {

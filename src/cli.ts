@@ -588,7 +588,14 @@ async function cmdCreate(run: RunContext): Promise<void> {
 		typeof run.flags.status === "string" && run.flags.status.trim()
 			? run.flags.status.trim()
 			: "open";
-	const body = (await readBody(run.flags)) ?? "";
+	const providedBody = (await readBody(run.flags)) ?? "";
+	// Seed every new pearl with a `# <title>` heading and a `## Description`
+	// section so bodies have a predictable shape (matches the import-beads
+	// layout). Provided body content lands under Description.
+	const descriptionContent = providedBody.replace(/^\s+|\s+$/g, "");
+	const body =
+		`# ${title}\n\n## Description\n\n` +
+		(descriptionContent ? descriptionContent + "\n" : "");
 
 	const id = await generateTodoId(run.todosDir);
 	const filePath = getTodoPath(run.todosDir, id);
