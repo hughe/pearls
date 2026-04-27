@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /**
- * pearls — an agent-friendly CLI wrapper around the Pi `todo` extension.
+ * pearls — an agent-friendly CLI wrapper around Armin Ronacher's `todos.ts`.
+ *
+ * The CLI is deliberately agent-agnostic: any tool that can run a shell
+ * command (Claude Code, Cursor, Aider, Codex, a plain bash agent, a human)
+ * can manage todos through pearls. If Pi happens to be running too, its
+ * `/todos` UI operates on the same files, but pearls does not depend on
+ * Pi being present at runtime.
  *
  * Storage is 100% compatible with `extensions/todo.ts`: both read and write
  * the same `.pi/todos/<id>.md` files with JSON front matter, honour
- * `PI_TODO_PATH`, respect lock files, and share a settings.json. That means
- * a human can run `pearls` on the command line while an agent in Pi uses
- * the `todo` tool against the same directory.
+ * `PI_TODO_PATH`, respect lock files, and share a settings.json.
  *
  * Every operation here is implemented by calling a function that already
  * exists in todo.ts — no business logic is reimplemented. The CLI only
@@ -25,6 +29,7 @@ import {
 	deleteTodo,
 	ensureTodoExists,
 	ensureTodosDir,
+	filterTodos,
 	formatTodoId,
 	formatTodoList,
 	garbageCollectTodos,
@@ -43,7 +48,7 @@ import {
 	writeTodoFile,
 	type TodoFrontMatter,
 	type TodoRecord,
-} from "./todo.js";
+} from "./todo-wrapper.js";
 
 // ---------------------------------------------------------------------------
 // Stub ExtensionContext
@@ -258,7 +263,8 @@ GLOBAL FLAGS
                          $PI_TODO_PATH). Exported as PI_TODO_PATH for todo.ts.
   --session <id>         Session id used for claim/release (default:
                          $PEARLS_SESSION or cli:<user>@<host>).
-  --json                 Emit JSON in the same shape Pi's todo tool returns.
+  --json                 Emit stable JSON (identical to Pi's todo tool output),
+                         suitable for any agent that parses tool results.
   --no-gc                Skip the normal startup garbage collection of old
                          closed todos.
   -h, --help             Show this help.
@@ -266,6 +272,11 @@ GLOBAL FLAGS
 COMMANDS
   list                   List open + assigned todos (default human output).
   list-all               List every todo including closed.
+  search <query...>      Fuzzy-search todos by id, title, tags, status, or
+                         assigned session. Prints one line per match:
+                         'TODO-<id>  <title>'. Closed todos are excluded
+                         unless --closed is passed. Use --json for the
+                         same shape as list --json.
   get <id>               Print a single todo (id may be TODO-<hex> or <hex>).
   show <id>              Alias for get.
   create <title...>      Create a new todo. Flags: --tag <t> (repeatable),
@@ -289,13 +300,15 @@ COMMANDS
 
 OUTPUT
   Human mode is the default and matches the "Assigned / Open / Closed"
-  sections that the Pi tool renders internally. --json produces the exact
-  JSON payload an agent sees through the Pi tool, so a shell-using agent
-  can parse pearls output the same way.
+  sections used by the underlying todo tool. --json produces a stable
+  JSON payload (the same one Pi's todo tool returns to an LLM), so any
+  agent that can run a shell command can parse pearls output directly.
 
 EXAMPLES
   pearls create "Write README" --tag docs --body "Explain storage format"
   pearls list --json
+  pearls search readme                 # open/assigned todos mentioning "readme"
+  pearls search readme --closed        # include closed ones too
   pearls append TODO-deadbeef --stdin-body < notes.md
   pearls close TODO-deadbeef
   PI_TODO_PATH=./todos pearls list
@@ -359,6 +372,8 @@ async function main(argv: string[]): Promise<void> {
 			return await cmdList(run, { includeClosed: false });
 		case "list-all":
 			return await cmdList(run, { includeClosed: true });
+		case "search":
+			return await cmdSearch(run);
 		case "get":
 		case "show":
 			return await cmdGet(run);
@@ -411,6 +426,50 @@ async function cmdList(
 		printJsonList(listed);
 	} else {
 		printHumanList(listed);
+	}
+}
+
+// ---- search ---------------------------------------------------------------
+
+async function cmdSearch(run: RunContext): Promise<void> {
+	// Query can come from positional args (most natural: `pearls search
+	// write readme`) or --search for symmetry with other flags.
+	const parts: string[] = [];
+	if (typeof run.flags.search === "string") parts.push(run.flags.search);
+	parts.push(...run.positional);
+	const query = parts.join(" ").trim();
+	if (!query) throw new CliError("search requires a query");
+
+	const includeClosed = Boolean(run.flags.closed);
+
+	const all = await listTodos(run.todosDir);
+	const candidates = includeClosed
+		? all
+		: (() => {
+				const { assignedTodos, openTodos } = splitTodosByAssignment(all);
+				return [...assignedTodos, ...openTodos];
+			})();
+
+	const matches = filterTodos(candidates, query);
+
+	if (run.json) {
+		// Same three-section shape as list --json so agents can parse it
+		// with the same code path. Closed bucket will be empty unless
+		// --closed was passed.
+		printJsonList(matches);
+		return;
+	}
+
+	if (matches.length === 0) {
+		// Exit 0 with no output keeps shell pipelines clean; a caller can
+		// detect "no hits" by checking `wc -l`.
+		return;
+	}
+
+	for (const todo of matches) {
+		process.stdout.write(
+			`${formatTodoId(todo.id)}  ${todo.title || "(untitled)"}\n`,
+		);
 	}
 }
 

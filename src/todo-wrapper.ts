@@ -75,6 +75,10 @@ export const withTodoLock: <T>(
 
 export const listTodos: (todosDir: string) => Promise<TodoFrontMatter[]> =
 	todo.listTodos;
+export const filterTodos: (
+	todos: TodoFrontMatter[],
+	query: string,
+) => TodoFrontMatter[] = todo.filterTodos;
 export const splitTodosByAssignment: (todos: TodoFrontMatter[]) => {
 	assignedTodos: TodoFrontMatter[];
 	openTodos: TodoFrontMatter[];

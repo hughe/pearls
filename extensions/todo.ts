@@ -205,7 +205,7 @@ function buildTodoSearchText(todo: TodoFrontMatter): string {
 	return `${formatTodoId(todo.id)} ${todo.id} ${todo.title} ${tags} ${todo.status} ${assignment}`.trim();
 }
 
-function filterTodos(todos: TodoFrontMatter[], query: string): TodoFrontMatter[] {
+export function filterTodos(todos: TodoFrontMatter[], query: string): TodoFrontMatter[] {
 	const trimmed = query.trim();
 	if (!trimmed) return todos;
 
