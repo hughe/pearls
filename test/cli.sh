@@ -206,16 +206,19 @@ assert_contains "$out" '"closed": []' "json list has empty closed"
 # Body isn't part of the list payload (matches Pi tool shape).
 assert_not_contains "$out" '"body"' "json list omits body field"
 
-section "search"
+section "search (fuzzy)"
 # Add an easily-matched third todo so search has something distinctive
 # to filter on across id / title / tags.
 pearls create "Wibble widget" --tag wibble >/dev/null
 
-out="$(pearls search wibble)"
-assert_contains "$out" "Wibble widget" "search finds by title"
+out="$(pearls search -f wibble)"
+assert_contains "$out" "Wibble widget" "search -f finds by title"
 assert_not_contains "$out" "Second task" "search excludes non-matches"
 
-out="$(pearls search wibble --json)"
+out="$(pearls search --fuzzy wibble)"
+assert_contains "$out" "Wibble widget" "search --fuzzy long form works"
+
+out="$(pearls search -f wibble --json)"
 assert_contains "$out" '"title": "Wibble widget"' "search --json wraps matches in list shape"
 assert_contains "$out" '"open": [' "search --json uses list shape"
 
@@ -223,20 +226,113 @@ assert_contains "$out" '"open": [' "search --json uses list shape"
 WID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 pearls close "TODO-$WID" >/dev/null
 
-out="$(pearls search wibble)"
+out="$(pearls search -f wibble)"
 assert_not_contains "$out" "Wibble widget" "search excludes closed by default"
 
-out="$(pearls search wibble --closed)"
+out="$(pearls search -f wibble --closed)"
 assert_contains "$out" "Wibble widget" "search --closed includes closed todos"
 
-# Missing-query and no-match behaviours.
-assert_status 2 "search with no query errors" pearls search
-out="$(pearls search no-such-todo-anywhere-12345)"
+# At-least-one-filter requirement and no-match behaviours.
+assert_status 2 "search with no filters errors" pearls search
+assert_status 2 "search rejects positional terms" pearls search wibble
+out="$(pearls search -f no-such-todo-anywhere-12345)"
 assert_eq "$out" "" "search with no matches prints nothing"
 
 # Reopen so later sections don't trip over an unexpected closed todo.
 pearls reopen "TODO-$WID" >/dev/null
 pearls delete "TODO-$WID" >/dev/null
+
+section "search (priority + child-of)"
+# Build a small fixture: parent with two children at different priorities,
+# plus an unrelated priority-0 todo.
+PARENT_OUT="$(pearls create "Parent task" --json)"
+PARENT_ID="$(printf '%s' "$PARENT_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+CHILD_A_OUT="$(pearls create "Child A" --priority 0 --parent "TODO-$PARENT_ID" --json)"
+CHILD_A_ID="$(printf '%s' "$CHILD_A_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+CHILD_B_OUT="$(pearls create "Child B" --priority 3 --parent "TODO-$PARENT_ID" --json)"
+CHILD_B_ID="$(printf '%s' "$CHILD_B_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+UNRELATED_OUT="$(pearls create "Unrelated p0" --priority 0 --json)"
+UNRELATED_ID="$(printf '%s' "$UNRELATED_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+# -p filters by priority exactly.
+out="$(pearls search -p 0)"
+assert_contains "$out" "Child A" "search -p 0 includes priority-0 child"
+assert_contains "$out" "Unrelated p0" "search -p 0 includes priority-0 sibling"
+assert_not_contains "$out" "Child B" "search -p 0 excludes priority-3 child"
+assert_not_contains "$out" "Parent task" "search -p 0 excludes todos with no priority"
+
+out="$(pearls search --priority 3)"
+assert_contains "$out" "Child B" "search --priority 3 includes priority-3 child"
+assert_not_contains "$out" "Child A" "search --priority 3 excludes priority-0 child"
+
+# -c filters by parent field.
+out="$(pearls search -c "TODO-$PARENT_ID")"
+assert_contains "$out" "Child A" "search -c finds child A"
+assert_contains "$out" "Child B" "search -c finds child B"
+assert_not_contains "$out" "Unrelated p0" "search -c excludes non-children"
+assert_not_contains "$out" "Parent task" "search -c excludes the parent itself"
+
+# Bare hex form also accepted.
+out="$(pearls search --child-of "$PARENT_ID")"
+assert_contains "$out" "Child A" "search --child-of accepts raw hex id"
+
+# Combining -p and -c narrows further.
+out="$(pearls search -p 0 -c "TODO-$PARENT_ID")"
+assert_contains "$out" "Child A" "search -p + -c keeps matching child"
+assert_not_contains "$out" "Child B" "search -p + -c filters out wrong priority"
+assert_not_contains "$out" "Unrelated p0" "search -p + -c filters out wrong parent"
+
+# Combining -f with -p.
+out="$(pearls search -f Child -p 3)"
+assert_contains "$out" "Child B" "search -f + -p includes the matching child"
+assert_not_contains "$out" "Child A" "search -f + -p excludes wrong-priority match"
+
+# Bad inputs.
+assert_status 2 "search rejects bad priority" pearls search -p 5
+assert_status 2 "search rejects malformed parent id" pearls search -c NOT-AN-ID
+
+# Tidy up so later sections see the original todo set.
+pearls delete "TODO-$CHILD_A_ID" >/dev/null
+pearls delete "TODO-$CHILD_B_ID" >/dev/null
+pearls delete "TODO-$UNRELATED_ID" >/dev/null
+pearls delete "TODO-$PARENT_ID" >/dev/null
+
+section "list ordering by priority"
+# Build three todos at priorities 4, 0, and 2 in creation order; the list
+# should re-order them ascending (0, 2, 4).
+P4_OUT="$(pearls create "Prio four" --priority 4 --json)"
+P4_ID="$(printf '%s' "$P4_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+P0_OUT="$(pearls create "Prio zero" --priority 0 --json)"
+P0_ID="$(printf '%s' "$P0_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+P2_OUT="$(pearls create "Prio two" --priority 2 --json)"
+P2_ID="$(printf '%s' "$P2_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+out="$(pearls list)"
+# Within the open section, expect 0 < 2 < 4.
+order="$(printf '%s\n' "$out" | awk '/^  TODO-/ { print }' | grep -oE 'Prio (zero|two|four)' | tr '\n' '|')"
+assert_eq "$order" "Prio zero|Prio two|Prio four|" "list orders open todos by priority asc"
+
+# Priority marker appears between the id and the title.
+assert_contains "$out" "[P0] Prio zero" "list shows [P0] before priority-0 title"
+assert_contains "$out" "[P4] Prio four" "list shows [P4] before priority-4 title"
+assert_not_contains "$out" "[P] Second task" "no priority marker for unprioritised todos"
+
+# Todos without priority fall after prioritised ones.
+out="$(pearls list)"
+no_prio_line=$(printf '%s\n' "$out" | awk '/Second task/ { print NR }')
+prio_four_line=$(printf '%s\n' "$out" | awk '/Prio four/ { print NR }')
+[[ -n "$no_prio_line" && -n "$prio_four_line" && "$no_prio_line" -gt "$prio_four_line" ]] \
+	&& pass "no-priority todos sort after prioritised todos" \
+	|| fail "no-priority todos sort after prioritised todos" \
+		"no_prio_line=$no_prio_line prio_four_line=$prio_four_line"
+
+# Tidy up.
+pearls delete "TODO-$P0_ID" >/dev/null
+pearls delete "TODO-$P2_ID" >/dev/null
+pearls delete "TODO-$P4_ID" >/dev/null
 
 section "get / show / path"
 out="$(pearls get "TODO-$ID")"
@@ -403,7 +499,7 @@ assert_contains "$mem_line" '"id":"mem-1"' "memory record preserved verbatim"
 
 # Spot-check a generated todo: original beads id + status mapping land
 # correctly, description leads the body.
-out="$(pearls --todo-dir "$IMPORT_DIR" search docker --closed)"
+out="$(pearls --todo-dir "$IMPORT_DIR" search -f docker --closed)"
 hit_id=$(printf '%s\n' "$out" | extract_id)
 [[ -n "$hit_id" ]] || fail "search found imported issue"
 out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
@@ -415,7 +511,7 @@ assert_contains "$out" "Copy shared libs" "body includes description"
 assert_contains "$out" "[beads, task]" "tags include beads + issue_type"
 
 # In-progress status is preserved verbatim (not normalised to open/closed).
-out="$(pearls --todo-dir "$IMPORT_DIR" search ConditionFailed)"
+out="$(pearls --todo-dir "$IMPORT_DIR" search -f ConditionFailed)"
 hit_id=$(printf '%s\n' "$out" | extract_id)
 out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
 assert_contains "$out" "status: in_progress" "in_progress preserved verbatim"

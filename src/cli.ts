@@ -108,7 +108,16 @@ const KNOWN_STRING_FLAGS = new Set([
 	"format",
 	"priority",
 	"parent",
+	"fuzzy",
+	"child-of",
 ]);
+
+// Short flags that take a value, mapped to their long-form key.
+const SHORT_VALUE_FLAGS: Record<string, string> = {
+	f: "fuzzy",
+	p: "priority",
+	c: "child-of",
+};
 
 const KNOWN_BOOL_FLAGS = new Set([
 	"json",
@@ -169,11 +178,19 @@ function parseArgs(argv: string[]): ParsedArgs {
 				flags[key] = value;
 			}
 		} else if (arg.startsWith("-") && arg.length > 1) {
-			// short flags: -h / -q etc.
+			// short flags: -h / -q (boolean), -f/-p/-c (take a value).
 			const short = arg.slice(1);
 			if (short === "h") flags.help = true;
 			else if (short === "q") flags.quiet = true;
-			else throw new CliError(`Unknown short flag: ${arg}`);
+			else if (SHORT_VALUE_FLAGS[short]) {
+				const longKey = SHORT_VALUE_FLAGS[short];
+				const next = argv[i + 1];
+				if (next === undefined || next.startsWith("--")) {
+					throw new CliError(`-${short} requires a value`);
+				}
+				flags[longKey] = next;
+				i += 1;
+			} else throw new CliError(`Unknown short flag: ${arg}`);
 		} else if (command === undefined) {
 			command = arg;
 		} else {
@@ -316,11 +333,16 @@ GLOBAL FLAGS
 COMMANDS
   list                   List open + assigned todos (default human output).
   list-all               List every todo including closed.
-  search <query...>      Fuzzy-search todos by id, title, tags, status, or
-                         assigned session. Prints one line per match:
-                         'TODO-<id>  <title>'. Closed todos are excluded
-                         unless --closed is passed. Use --json for the
-                         same shape as list --json.
+  search [filters]       Filter todos. At least one of:
+                           -f, --fuzzy <term>      Fuzzy-match id/title/
+                                                    tags/status/assignee.
+                           -p, --priority <0-4>    Exact priority match.
+                           -c, --child-of <id>     Only todos whose parent
+                                                    field equals <id>.
+                         Prints one line per match: 'TODO-<id>  <title>'.
+                         Closed todos are excluded unless --closed is
+                         passed. Use --json for the same shape as
+                         list --json.
   get <id>               Print a single todo (id may be TODO-<hex> or <hex>).
   show <id>              Alias for get.
   create <title...>      Create a new todo. Flags: --tag <t> (repeatable),
@@ -358,8 +380,10 @@ OUTPUT
 EXAMPLES
   pearls create "Write README" --tag docs --body "Explain storage format"
   pearls list --json
-  pearls search readme                 # open/assigned todos mentioning "readme"
-  pearls search readme --closed        # include closed ones too
+  pearls search -f readme              # open/assigned todos mentioning "readme"
+  pearls search -f readme --closed     # include closed ones too
+  pearls search -p 0                   # only priority-0 todos
+  pearls search -c TODO-deadbeef       # children of TODO-deadbeef
   pearls append TODO-deadbeef --stdin-body < notes.md
   pearls close TODO-deadbeef
   PI_TODO_PATH=./todos pearls list
@@ -406,8 +430,10 @@ CREATING WORK
 
 INSPECTING / SEARCHING
   pearls get TODO-<id>            # full body
-  pearls search <query>           # fuzzy match across id/title/tags/status
-  pearls search <query> --closed  # include closed todos
+  pearls search -f <query>        # fuzzy match across id/title/tags/status
+  pearls search -f <query> --closed  # include closed todos
+  pearls search -p 0              # priority 0 todos
+  pearls search -c TODO-<id>      # children of <id>
   pearls list-all                 # everything, including closed
 
 IDS
@@ -554,25 +580,53 @@ async function cmdList(
 // ---- search ---------------------------------------------------------------
 
 async function cmdSearch(run: RunContext): Promise<void> {
-	// Query can come from positional args (most natural: `pearls search
-	// write readme`) or --search for symmetry with other flags.
-	const parts: string[] = [];
-	if (typeof run.flags.search === "string") parts.push(run.flags.search);
-	parts.push(...run.positional);
-	const query = parts.join(" ").trim();
-	if (!query) throw new CliError("search requires a query");
+	const fuzzy =
+		typeof run.flags.fuzzy === "string" && run.flags.fuzzy.trim()
+			? run.flags.fuzzy.trim()
+			: undefined;
+	const priority = getPriority(run.flags);
+	const childOf = (() => {
+		const v = run.flags["child-of"];
+		if (v === undefined) return undefined;
+		if (typeof v !== "string" || !v.trim()) {
+			throw new CliError("--child-of requires a TODO-<hex> id");
+		}
+		const validated = validateTodoId(v);
+		if ("error" in validated) {
+			throw new CliError(`--child-of: ${validated.error}`);
+		}
+		return validated.id;
+	})();
+
+	if (fuzzy === undefined && priority === undefined && childOf === undefined) {
+		throw new CliError(
+			"search requires at least one of -f/--fuzzy, -p/--priority, -c/--child-of",
+		);
+	}
+	if (run.positional.length > 0) {
+		throw new CliError(
+			"search no longer accepts positional terms; use -f/--fuzzy <term>",
+		);
+	}
 
 	const includeClosed = Boolean(run.flags.closed);
 
 	const all = await listTodos(run.todosDir);
-	const candidates = includeClosed
+	let candidates = includeClosed
 		? all
 		: (() => {
 				const { assignedTodos, openTodos } = splitTodosByAssignment(all);
 				return [...assignedTodos, ...openTodos];
 			})();
 
-	const matches = filterTodos(candidates, query);
+	if (priority !== undefined) {
+		candidates = candidates.filter((t) => t.priority === priority);
+	}
+	if (childOf !== undefined) {
+		candidates = candidates.filter((t) => t.parent === childOf);
+	}
+
+	const matches = fuzzy ? filterTodos(candidates, fuzzy) : candidates;
 
 	if (run.json) {
 		// Same three-section shape as list --json so agents can parse it
@@ -589,8 +643,9 @@ async function cmdSearch(run: RunContext): Promise<void> {
 	}
 
 	for (const todo of matches) {
+		const pri = todo.priority !== undefined ? `[P${todo.priority}] ` : "";
 		process.stdout.write(
-			`${formatTodoId(todo.id)}  ${todo.title || "(untitled)"}\n`,
+			`${formatTodoId(todo.id)}  ${pri}${todo.title || "(untitled)"}\n`,
 		);
 	}
 }
