@@ -92,6 +92,7 @@ Global flags:
 | `delete <id>`           | Remove a todo.                                                       |
 | `dir`                   | Print the resolved todos directory.                                  |
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
+| `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 
 Ids may be written as `TODO-<hex>` or the raw `<hex>` filename; both are
 accepted everywhere, matching the Pi tool.
