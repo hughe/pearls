@@ -337,6 +337,66 @@ assert_contains "$out" "Deleted TODO-$ID" "delete prints confirmation"
 [[ ! -f "$FILE" ]] && pass "file removed on delete" || fail "file removed on delete"
 assert_status 1 "delete of missing errors" pearls delete "TODO-$ID"
 
+section "import-beads"
+# Build a small fixture covering: a closed issue with description, an
+# in_progress issue with labels + dependencies, and a non-issue record
+# (no title) that should land in memories.jsonl.
+BEADS_DIR="$WORK/beads-fixture"
+mkdir -p "$BEADS_DIR"
+BEADS_FILE="$BEADS_DIR/issues.jsonl"
+cat > "$BEADS_FILE" <<'JSONL'
+{"id":"sldb-3l0","title":"Don't use docker for CDK","description":"Copy shared libs out of build container.","status":"closed","priority":0,"issue_type":"task","assignee":"Hugh Emberson","created_at":"2026-04-21T15:35:49Z","close_reason":"Fixed by host-native CDK"}
+{"id":"sldb-pi0","title":"Handle ConditionFailed","description":"See upstream issue.","status":"in_progress","priority":2,"issue_type":"bug","labels":["urgent"],"created_at":"2026-04-20T00:02:13Z","dependencies":[{"depends_on_id":"sldb-3l0","type":"blocks"}]}
+{"id":"mem-1","kind":"memory","body":"Some recalled fact"}
+JSONL
+
+IMPORT_DIR="$WORK/import-todos"
+out="$(pearls --todo-dir "$IMPORT_DIR" import-beads "$BEADS_FILE")"
+assert_contains "$out" "imported 2 issue(s)" "import reports issue count"
+assert_contains "$out" "1 memory record" "import reports memory count"
+
+# Two .md files, one memories.jsonl with the un-titled record.
+md_count=$(find "$IMPORT_DIR" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+assert_eq "$md_count" "2" "import-beads wrote one .md per issue"
+[[ -f "$IMPORT_DIR/memories.jsonl" ]] && pass "memories.jsonl written" || fail "memories.jsonl written"
+mem_line=$(cat "$IMPORT_DIR/memories.jsonl")
+assert_contains "$mem_line" '"id":"mem-1"' "memory record preserved verbatim"
+
+# Spot-check a generated todo: original beads id + status mapping land
+# correctly, description leads the body.
+out="$(pearls --todo-dir "$IMPORT_DIR" search docker --closed)"
+hit_id=$(printf '%s\n' "$out" | extract_id)
+[[ -n "$hit_id" ]] || fail "search found imported issue"
+out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
+assert_contains "$out" "status: closed" "closed beads issue maps to closed pearl"
+assert_contains "$out" "| Original ID | sldb-3l0 |" "body records original beads id"
+assert_contains "$out" "# Description" "body has Description header"
+assert_contains "$out" "Copy shared libs" "body includes description"
+assert_contains "$out" "[beads, task]" "tags include beads + issue_type"
+
+# In-progress status is preserved verbatim (not normalised to open/closed).
+out="$(pearls --todo-dir "$IMPORT_DIR" search ConditionFailed)"
+hit_id=$(printf '%s\n' "$out" | extract_id)
+out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
+assert_contains "$out" "status: in_progress" "in_progress preserved verbatim"
+assert_contains "$out" "| Dependencies | blocks" "dependencies rendered"
+
+# Dry-run leaves the directory untouched.
+DRY_DIR="$WORK/import-dry"
+out="$(pearls --todo-dir "$DRY_DIR" import-beads "$BEADS_FILE" --dry-run)"
+assert_contains "$out" "would import 2" "dry-run reports without writing"
+dry_count=$(find "$DRY_DIR" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$dry_count" "0" "dry-run leaves no .md files"
+
+# JSON output mode.
+out="$(pearls --todo-dir "$WORK/import-json" import-beads "$BEADS_FILE" --json)"
+assert_contains "$out" '"imported": 2' "import-beads --json reports counts"
+assert_contains "$out" '"memories": 1' "import-beads --json reports memories"
+
+# Help mentions the new command.
+out="$(pearls help)"
+assert_contains "$out" "import-beads" "help lists import-beads"
+
 section "--no-gc"
 # Can't easily test GC without time travel; just assert the flag is
 # accepted and the command still succeeds.

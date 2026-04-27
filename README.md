@@ -93,6 +93,7 @@ Global flags:
 | `dir`                   | Print the resolved todos directory.                                  |
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
+| `import-beads <file>`   | Import a beads `issues.jsonl` file: one pearl per issue, description first in the body, beads metadata (original id, type, priority, dates, dependencies, …) appended as markdown. Records without a `title` (e.g. memories) are appended verbatim to `<todos-dir>/memories.jsonl`. Supports `--dry-run` and `--json`. |
 
 Ids may be written as `TODO-<hex>` or the raw `<hex>` filename; both are
 accepted everywhere, matching the Pi tool.
