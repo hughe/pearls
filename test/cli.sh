@@ -369,8 +369,9 @@ hit_id=$(printf '%s\n' "$out" | extract_id)
 [[ -n "$hit_id" ]] || fail "search found imported issue"
 out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
 assert_contains "$out" "status: closed" "closed beads issue maps to closed pearl"
-assert_contains "$out" "Original ID:** sldb-3l0" "body records original beads id"
-assert_contains "$out" "Copy shared libs" "body leads with description"
+assert_contains "$out" "| Original ID | sldb-3l0 |" "body records original beads id"
+assert_contains "$out" "# Description" "body has Description header"
+assert_contains "$out" "Copy shared libs" "body includes description"
 assert_contains "$out" "[beads, task]" "tags include beads + issue_type"
 
 # In-progress status is preserved verbatim (not normalised to open/closed).
@@ -378,7 +379,7 @@ out="$(pearls --todo-dir "$IMPORT_DIR" search ConditionFailed)"
 hit_id=$(printf '%s\n' "$out" | extract_id)
 out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
 assert_contains "$out" "status: in_progress" "in_progress preserved verbatim"
-assert_contains "$out" "Dependencies:** blocks" "dependencies rendered"
+assert_contains "$out" "| Dependencies | blocks" "dependencies rendered"
 
 # Dry-run leaves the directory untouched.
 DRY_DIR="$WORK/import-dry"

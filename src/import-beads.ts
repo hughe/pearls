@@ -99,46 +99,49 @@ function isIssueRecord(value: unknown): value is BeadsIssue {
 	return typeof v.title === "string" && v.title.trim().length > 0;
 }
 
-function fmt(label: string, value: unknown): string | undefined {
+function metaRow(label: string, value: unknown): string | undefined {
 	if (value === undefined || value === null) return undefined;
 	if (typeof value === "string" && value.trim() === "") return undefined;
-	return `- **${label}:** ${value}`;
+	// Pipes in cell values would break the markdown table; escape them.
+	const cell = String(value).replace(/\|/g, "\\|");
+	return `| ${label} | ${cell} |`;
 }
 
 function buildBody(issue: BeadsIssue): string {
 	const parts: string[] = [];
 	const description = (issue.description ?? "").trim();
-	if (description) parts.push(description);
+	if (description) parts.push("# Description\n\n" + description);
 
-	const meta: string[] = [];
-	const push = (line: string | undefined) => {
-		if (line) meta.push(line);
+	const rows: string[] = [];
+	const push = (row: string | undefined) => {
+		if (row) rows.push(row);
 	};
-	push(fmt("Original ID", issue.id));
-	push(fmt("Type", issue.issue_type));
-	push(fmt("Priority", issue.priority));
-	push(fmt("Assignee", issue.assignee ?? issue.owner));
-	push(fmt("Created by", issue.created_by));
-	push(fmt("Created", issue.created_at));
-	push(fmt("Started", issue.started_at));
-	push(fmt("Updated", issue.updated_at));
-	push(fmt("Closed", issue.closed_at));
-	push(fmt("Close reason", issue.close_reason));
-	push(fmt("External ref", issue.external_ref));
+	push(metaRow("Original ID", issue.id));
+	push(metaRow("Type", issue.issue_type));
+	push(metaRow("Priority", issue.priority));
+	push(metaRow("Assignee", issue.assignee ?? issue.owner));
+	push(metaRow("Created by", issue.created_by));
+	push(metaRow("Created", issue.created_at));
+	push(metaRow("Started", issue.started_at));
+	push(metaRow("Updated", issue.updated_at));
+	push(metaRow("Closed", issue.closed_at));
+	push(metaRow("Close reason", issue.close_reason));
+	push(metaRow("External ref", issue.external_ref));
 
 	if (issue.labels && issue.labels.length > 0) {
-		push(fmt("Labels", issue.labels.join(", ")));
+		push(metaRow("Labels", issue.labels.join(", ")));
 	}
 
 	if (issue.dependencies && issue.dependencies.length > 0) {
 		const deps = issue.dependencies
 			.map((d) => `${d.type ?? "depends_on"} → ${d.depends_on_id ?? "?"}`)
 			.join("; ");
-		push(fmt("Dependencies", deps));
+		push(metaRow("Dependencies", deps));
 	}
 
-	if (meta.length > 0) {
-		parts.push("## Beads metadata\n\n" + meta.join("\n"));
+	if (rows.length > 0) {
+		const table = ["| Field | Value |", "| --- | --- |", ...rows].join("\n");
+		parts.push("## Beads metadata\n\n" + table);
 	}
 
 	const ac = (issue.acceptance_criteria ?? "").trim();
