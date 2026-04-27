@@ -49,6 +49,7 @@ import {
 	type TodoFrontMatter,
 	type TodoRecord,
 } from "./todo-wrapper.js";
+import { importBeads } from "./import-beads.js";
 
 // ---------------------------------------------------------------------------
 // Stub ExtensionContext
@@ -115,6 +116,7 @@ const KNOWN_BOOL_FLAGS = new Set([
 	"stdin-body",
 	"quiet",
 	"no-gc",
+	"dry-run",
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -297,6 +299,11 @@ COMMANDS
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
   quickstart             Print an agent-oriented guide to using pearls.
+  import-beads <file>    Import a beads issues.jsonl file. Creates one
+                         pearl per issue (description first in body, beads
+                         metadata appended). Non-issue records are
+                         appended verbatim to memories.jsonl in the todos
+                         directory. Supports --dry-run.
   help                   Show this help.
 
 OUTPUT
@@ -473,6 +480,8 @@ async function main(argv: string[]): Promise<void> {
 		case "quickstart":
 			process.stdout.write(QUICKSTART);
 			return;
+		case "import-beads":
+			return await cmdImportBeads(run);
 		default:
 			fail(`Unknown command: ${parsed.command}. Try 'pearls help'.`, 2);
 	}
@@ -710,6 +719,42 @@ async function cmdRelease(run: RunContext): Promise<void> {
 
 	if (run.json) printJsonTodo(result as TodoRecord);
 	else printHumanTodo(result as TodoRecord);
+}
+
+// ---- import-beads ---------------------------------------------------------
+
+async function cmdImportBeads(run: RunContext): Promise<void> {
+	const file = run.positional[0];
+	if (!file) throw new CliError("import-beads requires a path to issues.jsonl");
+	if (!existsSync(file)) fail(`No such file: ${file}`);
+
+	const result = await importBeads({
+		file,
+		todosDir: run.todosDir,
+		ctx: run.ctx,
+		dryRun: Boolean(run.flags["dry-run"]),
+	});
+
+	if (run.json) {
+		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+		return;
+	}
+
+	const verb = run.flags["dry-run"] ? "would import" : "imported";
+	process.stdout.write(`${verb} ${result.imported} issue(s)\n`);
+	if (result.memories > 0) {
+		const dest = result.memoriesPath ?? "memories.jsonl";
+		const verb2 = run.flags["dry-run"] ? "would write" : "wrote";
+		process.stdout.write(
+			`${verb2} ${result.memories} memory record(s) to ${dest}\n`,
+		);
+	}
+	if (result.skipped > 0) {
+		process.stdout.write(`skipped ${result.skipped} record(s)\n`);
+	}
+	for (const err of result.errors) {
+		process.stderr.write(`pearls: ${err}\n`);
+	}
 }
 
 // ---- path -----------------------------------------------------------------
