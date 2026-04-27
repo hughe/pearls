@@ -21,6 +21,8 @@ export interface TodoFrontMatter {
 	status: string;
 	created_at: string;
 	assigned_to_session?: string;
+	priority?: number;
+	parent?: string;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
@@ -42,6 +44,8 @@ export const formatTodoId: (id: string) => string = todo.formatTodoId;
 export const validateTodoId: (
 	id: string,
 ) => { id: string } | { error: string } = todo.validateTodoId;
+export const validatePriority: (priority: number) => string | null =
+	todo.validatePriority;
 export const clearAssignmentIfClosed: (t: TodoFrontMatter) => void =
 	todo.clearAssignmentIfClosed;
 

@@ -43,6 +43,7 @@ import {
 	serializeTodoListForAgent,
 	splitTodosByAssignment,
 	updateTodoStatus,
+	validatePriority,
 	validateTodoId,
 	withTodoLock,
 	writeTodoFile,
@@ -105,6 +106,8 @@ const KNOWN_STRING_FLAGS = new Set([
 	"id",
 	"search",
 	"format",
+	"priority",
+	"parent",
 ]);
 
 const KNOWN_BOOL_FLAGS = new Set([
@@ -190,6 +193,39 @@ function getTags(flags: Record<string, string | boolean>): string[] | undefined 
 	return v.split("\n").map((t) => t.trim()).filter(Boolean);
 }
 
+function getPriority(
+	flags: Record<string, string | boolean>,
+): number | undefined {
+	const v = flags.priority;
+	if (v === undefined) return undefined;
+	if (typeof v !== "string") {
+		throw new CliError("--priority requires an integer 0-4");
+	}
+	const trimmed = v.trim();
+	if (!trimmed) return undefined;
+	const n = Number(trimmed);
+	const err = validatePriority(n);
+	if (err) throw new CliError(err);
+	return n;
+}
+
+function getParent(
+	flags: Record<string, string | boolean>,
+): string | undefined | null {
+	const v = flags.parent;
+	if (v === undefined) return undefined;
+	if (typeof v !== "string") {
+		throw new CliError("--parent requires a TODO-<hex> id");
+	}
+	const trimmed = v.trim();
+	if (!trimmed) return null;
+	const validated = validateTodoId(trimmed);
+	if ("error" in validated) {
+		throw new CliError(`--parent: ${validated.error}`);
+	}
+	return validated.id;
+}
+
 async function readBody(flags: Record<string, string | boolean>): Promise<string | undefined> {
 	if (flags["body-file"]) {
 		return await fs.readFile(String(flags["body-file"]), "utf8");
@@ -238,6 +274,12 @@ function printHumanTodo(todo: TodoRecord): void {
 		`${formatTodoId(todo.id)} ${todo.title || "(untitled)"}${tagText}${assignText}\n`,
 	);
 	process.stdout.write(`status: ${todo.status || "open"}\n`);
+	if (todo.priority !== undefined) {
+		process.stdout.write(`priority: ${todo.priority}\n`);
+	}
+	if (todo.parent) {
+		process.stdout.write(`parent: ${formatTodoId(todo.parent)}\n`);
+	}
 	if (todo.created_at) {
 		process.stdout.write(`created: ${todo.created_at}\n`);
 	}
@@ -283,10 +325,11 @@ COMMANDS
   show <id>              Alias for get.
   create <title...>      Create a new todo. Flags: --tag <t> (repeatable),
                          --status <s>, --body <text>, --body-file <file>,
-                         --stdin-body.
+                         --stdin-body, --priority <0-4>, --parent <id>.
   update <id>            Update a todo. Flags: --title, --status, --tag
                          (repeatable, replaces), --body, --body-file,
-                         --stdin-body.
+                         --stdin-body, --priority <0-4>, --parent <id>
+                         (pass empty string to clear).
   append <id>            Append markdown to a todo's body. Body sources as
                          for create.
   delete <id>            Delete a todo.
@@ -588,6 +631,8 @@ async function cmdCreate(run: RunContext): Promise<void> {
 		typeof run.flags.status === "string" && run.flags.status.trim()
 			? run.flags.status.trim()
 			: "open";
+	const priority = getPriority(run.flags);
+	const parent = getParent(run.flags);
 	const providedBody = (await readBody(run.flags)) ?? "";
 	// Seed every new pearl with a `# <title>` heading and a `## Description`
 	// section so bodies have a predictable shape (matches the import-beads
@@ -605,6 +650,8 @@ async function cmdCreate(run: RunContext): Promise<void> {
 		tags,
 		status,
 		created_at: new Date().toISOString(),
+		priority,
+		parent: parent ?? undefined,
 		body,
 	};
 
@@ -629,9 +676,20 @@ async function cmdUpdate(run: RunContext): Promise<void> {
 	const status = typeof run.flags.status === "string" ? run.flags.status : undefined;
 	const tags = getTags(run.flags);
 	const body = await readBody(run.flags);
+	const priority = getPriority(run.flags);
+	const parent = getParent(run.flags);
 
-	if (title === undefined && status === undefined && tags === undefined && body === undefined) {
-		throw new CliError("update requires at least one of --title, --status, --tag, --body, --body-file, --stdin-body");
+	if (
+		title === undefined &&
+		status === undefined &&
+		tags === undefined &&
+		body === undefined &&
+		priority === undefined &&
+		parent === undefined
+	) {
+		throw new CliError(
+			"update requires at least one of --title, --status, --tag, --body, --body-file, --stdin-body, --priority, --parent",
+		);
 	}
 
 	const result = await withTodoLock(run.todosDir, id, run.ctx, async () => {
@@ -642,6 +700,8 @@ async function cmdUpdate(run: RunContext): Promise<void> {
 		if (status !== undefined) existing.status = status;
 		if (tags !== undefined) existing.tags = tags;
 		if (body !== undefined) existing.body = body;
+		if (priority !== undefined) existing.priority = priority;
+		if (parent !== undefined) existing.parent = parent ?? undefined;
 		if (!existing.created_at) existing.created_at = new Date().toISOString();
 		clearAssignmentIfClosed(existing);
 		await writeTodoFile(filePath, existing);

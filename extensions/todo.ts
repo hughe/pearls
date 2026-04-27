@@ -72,6 +72,8 @@ export interface TodoFrontMatter {
 	status: string;
 	created_at: string;
 	assigned_to_session?: string;
+	priority?: number;
+	parent?: string;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
@@ -114,6 +116,18 @@ const TodoParams = Type.Object({
 	tags: Type.Optional(Type.Array(Type.String({ description: "Todo tag" }))),
 	body: Type.Optional(
 		Type.String({ description: "Long-form details (markdown). Update replaces; append adds." }),
+	),
+	priority: Type.Optional(
+		Type.Integer({
+			minimum: 0,
+			maximum: 4,
+			description: "Priority 0-4 (0 highest)",
+		}),
+	),
+	parent: Type.Optional(
+		Type.String({
+			description: "Parent todo id as 8-char hex (or TODO-<hex>)",
+		}),
 	),
 	force: Type.Optional(Type.Boolean({ description: "Override another session's assignment" })),
 });
@@ -171,6 +185,13 @@ export function validateTodoId(id: string): { id: string } | { error: string } {
 		return { error: "Invalid todo id. Expected TODO-<hex>." };
 	}
 	return { id: normalized.toLowerCase() };
+}
+
+export function validatePriority(priority: number): string | null {
+	if (!Number.isInteger(priority) || priority < 0 || priority > 4) {
+		return "Invalid priority. Expected integer 0-4.";
+	}
+	return null;
 }
 
 function displayTodoId(id: string): string {
@@ -813,6 +834,8 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		status: "open",
 		created_at: "",
 		assigned_to_session: undefined,
+		priority: undefined,
+		parent: undefined,
 	};
 
 	const trimmed = text.trim();
@@ -830,6 +853,17 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		}
 		if (Array.isArray(parsed.tags)) {
 			data.tags = parsed.tags.filter((tag): tag is string => typeof tag === "string");
+		}
+		if (
+			typeof parsed.priority === "number" &&
+			Number.isInteger(parsed.priority) &&
+			parsed.priority >= 0 &&
+			parsed.priority <= 4
+		) {
+			data.priority = parsed.priority;
+		}
+		if (typeof parsed.parent === "string" && TODO_ID_PATTERN.test(parsed.parent)) {
+			data.parent = parsed.parent.toLowerCase();
 		}
 	} catch {
 		return data;
@@ -905,6 +939,8 @@ function parseTodoContent(content: string, idFallback: string): TodoRecord {
 		status: parsed.status,
 		created_at: parsed.created_at,
 		assigned_to_session: parsed.assigned_to_session,
+		priority: parsed.priority,
+		parent: parsed.parent,
 		body: body ?? "",
 	};
 }
@@ -918,6 +954,8 @@ function serializeTodo(todo: TodoRecord): string {
 			status: todo.status,
 			created_at: todo.created_at,
 			assigned_to_session: todo.assigned_to_session || undefined,
+			priority: todo.priority,
+			parent: todo.parent || undefined,
 		},
 		null,
 		2,
@@ -1054,6 +1092,8 @@ export async function listTodos(todosDir: string): Promise<TodoFrontMatter[]> {
 				status: parsed.status,
 				created_at: parsed.created_at,
 				assigned_to_session: parsed.assigned_to_session,
+				priority: parsed.priority,
+				parent: parsed.parent,
 			});
 		} catch {
 			// ignore unreadable todo
@@ -1087,6 +1127,8 @@ function listTodosSync(todosDir: string): TodoFrontMatter[] {
 				status: parsed.status,
 				created_at: parsed.created_at,
 				assigned_to_session: parsed.assigned_to_session,
+				priority: parsed.priority,
+				parent: parsed.parent,
 			});
 		} catch {
 			// ignore
@@ -1512,6 +1554,26 @@ export default function todosExtension(pi: ExtensionAPI) {
 							details: { action: "create", error: "title required" },
 						};
 					}
+					if (params.priority !== undefined) {
+						const err = validatePriority(params.priority);
+						if (err) {
+							return {
+								content: [{ type: "text", text: err }],
+								details: { action: "create", error: err },
+							};
+						}
+					}
+					let parentId: string | undefined;
+					if (params.parent !== undefined) {
+						const validated = validateTodoId(params.parent);
+						if ("error" in validated) {
+							return {
+								content: [{ type: "text", text: `Invalid parent: ${validated.error}` }],
+								details: { action: "create", error: validated.error },
+							};
+						}
+						parentId = validated.id;
+					}
 					await ensureTodosDir(todosDir);
 					const id = await generateTodoId(todosDir);
 					const filePath = getTodoPath(todosDir, id);
@@ -1521,6 +1583,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 						tags: params.tags ?? [],
 						status: params.status ?? "open",
 						created_at: new Date().toISOString(),
+						priority: params.priority,
+						parent: parentId,
 						body: params.body ?? "",
 					};
 
@@ -1565,6 +1629,30 @@ export default function todosExtension(pi: ExtensionAPI) {
 							details: { action: "update", error: "not found" },
 						};
 					}
+					if (params.priority !== undefined) {
+						const err = validatePriority(params.priority);
+						if (err) {
+							return {
+								content: [{ type: "text", text: err }],
+								details: { action: "update", error: err },
+							};
+						}
+					}
+					let parentId: string | undefined;
+					if (params.parent !== undefined) {
+						if (params.parent === "") {
+							parentId = undefined;
+						} else {
+							const validated = validateTodoId(params.parent);
+							if ("error" in validated) {
+								return {
+									content: [{ type: "text", text: `Invalid parent: ${validated.error}` }],
+									details: { action: "update", error: validated.error },
+								};
+							}
+							parentId = validated.id;
+						}
+					}
 					const result = await withTodoLock(todosDir, normalizedId, ctx, async () => {
 						const existing = await ensureTodoExists(filePath, normalizedId);
 						if (!existing) return { error: `Todo ${displayId} not found` } as const;
@@ -1574,6 +1662,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 						if (params.status !== undefined) existing.status = params.status;
 						if (params.tags !== undefined) existing.tags = params.tags;
 						if (params.body !== undefined) existing.body = params.body;
+						if (params.priority !== undefined) existing.priority = params.priority;
+						if (params.parent !== undefined) existing.parent = parentId;
 						if (!existing.created_at) existing.created_at = new Date().toISOString();
 						clearAssignmentIfClosed(existing);
 

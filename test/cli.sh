@@ -263,6 +263,43 @@ assert_not_contains "$(cat "$FILE")" "Initial body." "update replaced body on di
 section "update requires some field"
 assert_status 2 "bare update errors" pearls update "TODO-$ID"
 
+section "priority + parent fields"
+out="$(pearls create "Child task" --priority 2 --parent "TODO-$ID" --json)"
+assert_contains "$out" '"priority": 2' "create stores priority in JSON output"
+assert_contains "$out" "\"parent\": \"$ID\"" "create stores parent in JSON output"
+CHILD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+[[ ${#CHILD_ID} -eq 8 ]] && pass "child id parsed ($CHILD_ID)" || fail "child id parsed"
+
+CHILD_FILE="$WORK/todos/$CHILD_ID.md"
+assert_contains "$(cat "$CHILD_FILE")" '"priority": 2' "front matter contains priority"
+assert_contains "$(cat "$CHILD_FILE")" "\"parent\": \"$ID\"" "front matter contains parent"
+
+# Human output renders both new fields.
+out="$(pearls get "TODO-$CHILD_ID")"
+assert_contains "$out" "priority: 2" "get prints priority"
+assert_contains "$out" "parent: TODO-$ID" "get prints parent in TODO- form"
+
+# Update can change priority + parent.
+out="$(pearls update "TODO-$CHILD_ID" --priority 0 --json)"
+assert_contains "$out" '"priority": 0' "update changes priority"
+
+# Bad priority is rejected.
+assert_status 2 "priority out of range rejected" \
+	pearls create "Bad" --priority 5
+assert_status 2 "priority non-integer rejected" \
+	pearls create "Bad" --priority abc
+
+# Bad parent is rejected.
+assert_status 2 "parent invalid id rejected" \
+	pearls create "Bad" --parent NOT-AN-ID
+
+# Clearing parent via empty string.
+out="$(pearls update "TODO-$CHILD_ID" --parent "" --json)"
+assert_not_contains "$out" '"parent"' "empty --parent clears the parent field"
+
+# Tidy up so later sections see the same todo set as before.
+pearls delete "TODO-$CHILD_ID" >/dev/null
+
 section "append (--body, --stdin-body, --body-file)"
 out="$(pearls append "TODO-$ID" --body "Appended via flag.")"
 assert_contains "$out" "Appended via flag." "append via --body works"
