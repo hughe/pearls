@@ -197,6 +197,38 @@ assert_contains "$out" '"closed": []' "json list has empty closed"
 # Body isn't part of the list payload (matches Pi tool shape).
 assert_not_contains "$out" '"body"' "json list omits body field"
 
+section "search"
+# Add an easily-matched third todo so search has something distinctive
+# to filter on across id / title / tags.
+pearls create "Wibble widget" --tag wibble >/dev/null
+
+out="$(pearls search wibble)"
+assert_contains "$out" "Wibble widget" "search finds by title"
+assert_not_contains "$out" "Second task" "search excludes non-matches"
+
+out="$(pearls search wibble --json)"
+assert_contains "$out" '"title": "Wibble widget"' "search --json wraps matches in list shape"
+assert_contains "$out" '"open": [' "search --json uses list shape"
+
+# Close the wibble todo so we can test --closed behaviour.
+WID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+pearls close "TODO-$WID" >/dev/null
+
+out="$(pearls search wibble)"
+assert_not_contains "$out" "Wibble widget" "search excludes closed by default"
+
+out="$(pearls search wibble --closed)"
+assert_contains "$out" "Wibble widget" "search --closed includes closed todos"
+
+# Missing-query and no-match behaviours.
+assert_status 2 "search with no query errors" pearls search
+out="$(pearls search no-such-todo-anywhere-12345)"
+assert_eq "$out" "" "search with no matches prints nothing"
+
+# Reopen so later sections don't trip over an unexpected closed todo.
+pearls reopen "TODO-$WID" >/dev/null
+pearls delete "TODO-$WID" >/dev/null
+
 section "get / show / path"
 out="$(pearls get "TODO-$ID")"
 assert_contains "$out" "TODO-$ID" "get finds by TODO-<hex>"

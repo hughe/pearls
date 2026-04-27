@@ -45,6 +45,8 @@ pearls help                                    # list commands
 pearls create "Write README" --tag docs        # create a todo
 pearls list                                    # human output
 pearls list --json                             # machine-readable (matches Pi tool output)
+pearls search readme                           # fuzzy-search open todos
+pearls search readme --closed                  # include closed todos in results
 pearls get TODO-deadbeef                       # show one
 pearls append TODO-deadbeef --stdin-body < notes.md
 pearls close TODO-deadbeef                     # shortcut for --status closed
@@ -78,6 +80,7 @@ Global flags:
 | ----------------------- | -------------------------------------------------------------------- |
 | `list`                  | Open + assigned todos (default).                                     |
 | `list-all`              | Includes closed.                                                     |
+| `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `TODO-<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
 | `get <id>` / `show <id>`| Single todo, body included.                                          |
 | `create <title…>`       | `--tag` (repeatable), `--status`, `--body`, `--body-file`, `--stdin-body`. |
 | `update <id>`           | Same body sources, plus `--title`, `--status`, `--tag` (replaces).   |
