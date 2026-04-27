@@ -93,6 +93,17 @@ Global flags:
 Ids may be written as `TODO-<hex>` or the raw `<hex>` filename; both are
 accepted everywhere, matching the Pi tool.
 
+## Tests
+
+`test/cli.sh` is a bash smoke/integration test that drives every command
+against a scratch todos directory and asserts both human and `--json`
+output plus the on-disk file format.
+
+```sh
+npm test          # runs against src/cli.ts via tsx (no build needed)
+npm run test:dist # builds then runs against dist/src/cli.js
+```
+
 ## Status
 
 v0.1 — CLI feature-complete against the actions exposed by Armin's
