@@ -49,7 +49,7 @@ import {
 	writeTodoFile,
 	type TodoFrontMatter,
 	type TodoRecord,
-} from "./todo-wrapper.js";
+} from "./pearls-wrapper.js";
 import { importBeads } from "./import-beads.js";
 
 // ---------------------------------------------------------------------------

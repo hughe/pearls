@@ -2,7 +2,7 @@
  * Typed re-export bridge to the Pi todo extension.
  *
  * The CLI imports all todo storage/logic functions from this module. The
- * real implementation lives in ../extensions/todo.ts (a verbatim copy of
+ * real implementation lives in ../extensions/pearls.ts (a verbatim copy of
  * the Pi extension, marked `@ts-nocheck` so pearls doesn't attempt to
  * type-check upstream code). Here we describe the subset of exports the
  * CLI uses with pearls-local types — in particular a narrowed
@@ -10,9 +10,9 @@
  * reads when driven from the CLI (no UI, stub session manager).
  *
  * No behaviour is added or changed; everything is a straight re-export of
- * a function that already exists in extensions/todo.ts.
+ * a function that already exists in extensions/pearls.ts.
  */
-import * as todo from "../extensions/todo.js";
+import * as todo from "../extensions/pearls.js";
 
 export interface TodoFrontMatter {
 	id: string;

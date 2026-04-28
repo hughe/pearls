@@ -21,7 +21,7 @@ import {
 	writeTodoFile,
 	type CliExtensionContextLike,
 	type TodoRecord,
-} from "./todo-wrapper.js";
+} from "./pearls-wrapper.js";
 
 interface BeadsDependency {
 	issue_id?: string;

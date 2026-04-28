@@ -19,14 +19,14 @@ Only the per-session `*.lock` files are gitignored.
 
 ## Layout
 
-- `extensions/todo.ts` – a vendored copy of Armin's Pi extension, renamed
+- `extensions/pearls.ts` – a vendored copy of Armin's Pi extension, renamed
   to `pearls` (activated via `/pearls` in Pi). A single-line `@ts-nocheck`
   marker and `export` added to the handful of storage/logic functions the
   CLI reuses. No behaviour changes beyond the rename.
-- `src/todo-wrapper.ts` – a small re-export bridge that types the subset
+- `src/pearls-wrapper.ts` – a small re-export bridge that types the subset
   of exports the CLI needs.
 - `src/cli.ts` – the `pearls` CLI. All commands dispatch into functions
-  that already exist in `extensions/todo.ts`.
+  that already exist in `extensions/pearls.ts`.
 
 ## Install
 
