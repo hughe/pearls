@@ -27,7 +27,7 @@
  *   "gcDays": 7   // age threshold for GC (days since created_at)
  * }
  *
- * Use `/todos` to bring up the visual todo manager or just let the LLM use them
+ * Use `/pearls` to bring up the visual todo manager or just let the LLM use them
  * naturally.
  */
 import { DynamicBorder, copyToClipboard, getMarkdownTheme, keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@mariozechner/pi-coding-agent";
@@ -1667,13 +1667,13 @@ export default function todosExtension(pi: ExtensionAPI) {
 	const todosDirLabel = getTodosDirLabel(process.cwd());
 
 	pi.registerTool({
-		name: "todo",
-		label: "Todo",
+		name: "pearls",
+		label: "Pearls",
 		description:
 			`Manage file-based todos in ${todosDirLabel} (list, list-all, get, create, update, append, delete, claim, release). ` +
 			"Title is the short summary; body is long-form markdown notes (update replaces, append adds). " +
 			"Todo ids are shown as TODO-<hex>; id parameters accept TODO-<hex> or the raw hex filename. " +
-			"Claim tasks before working on them to avoid conflicts, and close them when complete.", 
+			"Claim tasks before working on them to avoid conflicts, and close them when complete.",
 		parameters: TodoParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -2005,7 +2005,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 			const id = typeof args.id === "string" ? args.id : "";
 			const normalizedId = id ? normalizeTodoId(id) : "";
 			const title = typeof args.title === "string" ? args.title : "";
-			let text = theme.fg("toolTitle", theme.bold("todo ")) + theme.fg("muted", action);
+			let text = theme.fg("toolTitle", theme.bold("pearls ")) + theme.fg("muted", action);
 			if (normalizedId) {
 				text += " " + theme.fg("accent", formatTodoId(normalizedId));
 			}
@@ -2072,8 +2072,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("todos", {
-		description: "List todos from .pi/todos",
+	pi.registerCommand("pearls", {
+		description: "Pearls todo manager",
 		handler: async (args, ctx) => {
 			const todosDir = getTodosDir(ctx.cwd);
 			const todos = await listTodos(todosDir);

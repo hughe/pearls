@@ -9,7 +9,7 @@ extension for [Pi](https://github.com/mariozechner/pi).
 — any coding agent that can run a shell command (Claude Code, Cursor,
 Aider, Codex, a plain bash agent, etc.) can drive todos through `pearls`,
 and a human can use the same commands from the terminal. If you do happen
-to be running Pi, its `/todos` UI reads and writes the same files, so all
+to be running Pi, its `/pearls` UI reads and writes the same files, so all
 three surfaces stay in sync.
 
 Todos live in `.pi/todos/<id>.md` (override with `--todo-dir` or
@@ -19,9 +19,10 @@ Only the per-session `*.lock` files are gitignored.
 
 ## Layout
 
-- `extensions/todo.ts` – a verbatim copy of Armin's Pi extension, with a
-  single-line `@ts-nocheck` marker and `export` added to the handful of
-  storage/logic functions the CLI reuses. No behaviour changes.
+- `extensions/todo.ts` – a vendored copy of Armin's Pi extension, renamed
+  to `pearls` (activated via `/pearls` in Pi). A single-line `@ts-nocheck`
+  marker and `export` added to the handful of storage/logic functions the
+  CLI reuses. No behaviour changes beyond the rename.
 - `src/todo-wrapper.ts` – a small re-export bridge that types the subset
   of exports the CLI needs.
 - `src/cli.ts` – the `pearls` CLI. All commands dispatch into functions
@@ -96,7 +97,7 @@ Global flags:
 | `import-beads <file>`   | Import a beads `issues.jsonl` file: one pearl per issue, description first in the body, beads metadata (original id, type, priority, dates, dependencies, …) appended as markdown. Records without a `title` (e.g. memories) are appended verbatim to `<todos-dir>/memories.jsonl`. Supports `--dry-run` and `--json`. |
 
 Ids may be written as `TODO-<hex>` or the raw `<hex>` filename; both are
-accepted everywhere, matching the Pi tool.
+accepted everywhere, matching the Pi `pearls` tool.
 
 ## Tests
 
