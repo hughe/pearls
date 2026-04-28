@@ -157,7 +157,7 @@ type TodoMenuAction =
 	| "view";
 
 type TodoToolDetails =
-	| { action: "list" | "list-all"; todos: TodoFrontMatter[]; currentSessionId?: string; error?: string }
+	| { action: "list" | "list-all"; todos: TodoFrontMatter[]; allTodos: TodoFrontMatter[]; currentSessionId?: string; error?: string }
 	| {
 			action: "get" | "create" | "update" | "append" | "delete" | "claim" | "release";
 			todo: TodoRecord;
@@ -213,9 +213,6 @@ function sortTodos(todos: TodoFrontMatter[]): TodoFrontMatter[] {
 		const aClosed = isTodoClosed(a.status);
 		const bClosed = isTodoClosed(b.status);
 		if (aClosed !== bClosed) return aClosed ? 1 : -1;
-		const aAssigned = !aClosed && Boolean(a.assigned_to_session);
-		const bAssigned = !bClosed && Boolean(b.assigned_to_session);
-		if (aAssigned !== bAssigned) return aAssigned ? -1 : 1;
 		const aPri = a.priority ?? Number.POSITIVE_INFINITY;
 		const bPri = b.priority ?? Number.POSITIVE_INFINITY;
 		if (aPri !== bPri) return aPri - bPri;
@@ -375,9 +372,21 @@ class TodoSelectorComponent extends Container implements Focusable {
 		);
 	}
 
+	/** Build a flat, tree-ordered list from filteredTodos */
+	private getFlatTreeTodos(): TodoFrontMatter[] {
+		const allTodoIds = new Set(this.allTodos.map((t) => t.id));
+		const tree = buildTodoTree(this.filteredTodos, this.allTodos, allTodoIds);
+		const flat: TodoFrontMatter[] = [];
+		renderTreeLines(tree, "  ", [] as string[], (_prefix, _connector, todo) => {
+			flat.push(todo);
+		});
+		return flat;
+	}
+
 	private applyFilter(query: string): void {
 		this.filteredTodos = filterTodos(this.allTodos, query);
-		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredTodos.length - 1));
+		const flat = this.getFlatTreeTodos();
+		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, flat.length - 1));
 		this.updateList();
 	}
 
@@ -389,26 +398,42 @@ class TodoSelectorComponent extends Container implements Focusable {
 			return;
 		}
 
+		// Build a flat display list with tree prefixes for the selector.
+		// Each entry is { todo, displayLine } where displayLine includes tree chars.
+		const allTodoIds = new Set(this.allTodos.map((t) => t.id));
+		const tree = buildTodoTree(this.filteredTodos, this.allTodos, allTodoIds);
+		const flatEntries: Array<{ todo: TodoFrontMatter; displayLine: string }> = [];
+		renderTreeLines(tree, "  ", [] as string[], (prefix, connector, todo) => {
+			flatEntries.push({ todo, displayLine: prefix + connector });
+		});
+
 		const maxVisible = 10;
 		const startIndex = Math.max(
 			0,
-			Math.min(this.selectedIndex - Math.floor(maxVisible / 2), this.filteredTodos.length - maxVisible),
+			Math.min(this.selectedIndex - Math.floor(maxVisible / 2), flatEntries.length - maxVisible),
 		);
-		const endIndex = Math.min(startIndex + maxVisible, this.filteredTodos.length);
+		const endIndex = Math.min(startIndex + maxVisible, flatEntries.length);
 
 		for (let i = startIndex; i < endIndex; i += 1) {
-			const todo = this.filteredTodos[i];
-			if (!todo) continue;
+			const entry = flatEntries[i];
+			if (!entry) continue;
+			const todo = entry.todo;
 			const isSelected = i === this.selectedIndex;
 			const closed = isTodoClosed(todo.status);
-			const prefix = isSelected ? this.theme.fg("accent", "→ ") : "  ";
+			const treePrefix = entry.displayLine;
+			const selectPrefix = isSelected ? this.theme.fg("accent", "→ ") : "  ";
 			const titleColor = isSelected ? "accent" : closed ? "dim" : "text";
 			const statusColor = closed ? "dim" : "success";
 			const tagText = todo.tags.length ? ` [${todo.tags.join(", ")}]` : "";
 			const assignmentText = renderAssignmentSuffix(this.theme, todo, this.currentSessionId);
+			const priLabel = todo.priority !== undefined ? `P${todo.priority}` : "P?";
+			const priColor = todo.priority !== undefined ? "muted" : "dim";
 			const line =
-				prefix +
+				selectPrefix +
+				this.theme.fg("dim", treePrefix) +
 				this.theme.fg("accent", formatTodoId(todo.id)) +
+				" " +
+				this.theme.fg(priColor, priLabel) +
 				" " +
 				this.theme.fg(titleColor, todo.title || "(untitled)") +
 				this.theme.fg("muted", tagText) +
@@ -418,10 +443,10 @@ class TodoSelectorComponent extends Container implements Focusable {
 			this.listContainer.addChild(new Text(line, 0, 0));
 		}
 
-		if (startIndex > 0 || endIndex < this.filteredTodos.length) {
+		if (startIndex > 0 || endIndex < flatEntries.length) {
 			const scrollInfo = this.theme.fg(
 				"dim",
-				`  (${this.selectedIndex + 1}/${this.filteredTodos.length})`,
+				`  (${this.selectedIndex + 1}/${flatEntries.length})`,
 			);
 			this.listContainer.addChild(new Text(scrollInfo, 0, 0));
 		}
@@ -429,20 +454,21 @@ class TodoSelectorComponent extends Container implements Focusable {
 
 	handleInput(keyData: string): void {
 		const kb = this.keybindings;
+		const flat = this.getFlatTreeTodos();
 		if (kb.matches(keyData, "tui.select.up")) {
-			if (this.filteredTodos.length === 0) return;
-			this.selectedIndex = this.selectedIndex === 0 ? this.filteredTodos.length - 1 : this.selectedIndex - 1;
+			if (flat.length === 0) return;
+			this.selectedIndex = this.selectedIndex === 0 ? flat.length - 1 : this.selectedIndex - 1;
 			this.updateList();
 			return;
 		}
 		if (kb.matches(keyData, "tui.select.down")) {
-			if (this.filteredTodos.length === 0) return;
-			this.selectedIndex = this.selectedIndex === this.filteredTodos.length - 1 ? 0 : this.selectedIndex + 1;
+			if (flat.length === 0) return;
+			this.selectedIndex = this.selectedIndex === flat.length - 1 ? 0 : this.selectedIndex + 1;
 			this.updateList();
 			return;
 		}
 		if (kb.matches(keyData, "tui.select.confirm")) {
-			const selected = this.filteredTodos[this.selectedIndex];
+			const selected = flat[this.selectedIndex];
 			if (selected) this.onSelectCallback(selected);
 			return;
 		}
@@ -451,12 +477,12 @@ class TodoSelectorComponent extends Container implements Focusable {
 			return;
 		}
 		if (matchesKey(keyData, Key.ctrlShift("r"))) {
-			const selected = this.filteredTodos[this.selectedIndex];
+			const selected = flat[this.selectedIndex];
 			if (selected && this.onQuickAction) this.onQuickAction(selected, "refine");
 			return;
 		}
 		if (matchesKey(keyData, Key.ctrlShift("w"))) {
-			const selected = this.filteredTodos[this.selectedIndex];
+			const selected = flat[this.selectedIndex];
 			if (selected && this.onQuickAction) this.onQuickAction(selected, "work");
 			return;
 		}
@@ -712,8 +738,12 @@ class TodoDetailOverlayComponent {
 		const status = this.todo.status || "open";
 		const statusColor = isTodoClosed(status) ? "dim" : "success";
 		const tagText = this.todo.tags.length ? this.todo.tags.join(", ") : "no tags";
+		const priLabel = this.todo.priority !== undefined ? `P${this.todo.priority}` : "P?";
+		const priColor = this.todo.priority !== undefined ? "muted" : "dim";
 		const line =
 			this.theme.fg("accent", formatTodoId(this.todo.id)) +
+			this.theme.fg("muted", " • ") +
+			this.theme.fg(priColor, priLabel) +
 			this.theme.fg("muted", " • ") +
 			this.theme.fg(statusColor, status) +
 			this.theme.fg("muted", " • ") +
@@ -1166,12 +1196,143 @@ function renderAssignmentSuffix(
 }
 
 function formatPriorityTag(todo: TodoFrontMatter): string {
-	return todo.priority !== undefined ? ` [P${todo.priority}]` : "";
+	return todo.priority !== undefined ? ` [P${todo.priority}]` : " [P?]";
 }
+
+// ---------------------------------------------------------------------------
+// Tree display helpers
+// ---------------------------------------------------------------------------
+
+interface TodoTreeNode {
+	todo: TodoFrontMatter;
+	children: TodoTreeNode[];
+	isOrphan: boolean; // parent ref exists but parent is closed/deleted/missing
+}
+
+/**
+ * Build a tree from a flat list of todos within a section.
+ * Uses `allTodoIds` (ids across ALL sections) to determine orphan status:
+ *   - If a child's parent is in the same section → tree child
+ *   - If a child's parent is in a different section but still exists → root in this section
+ *   - If a child's parent doesn't exist at all (deleted) → orphan root with ¿ marker
+ */
+function buildTodoTree(
+	sectionTodos: TodoFrontMatter[],
+	allTodos: TodoFrontMatter[],
+	allTodoIds: Set<string>,
+): TodoTreeNode[] {
+	const sectionIds = new Set(sectionTodos.map((t) => t.id));
+	const childrenMap = new Map<string, TodoFrontMatter[]>();
+	const roots: TodoFrontMatter[] = [];
+	const orphans: TodoFrontMatter[] = [];
+
+	const sortByNotClosedPriorityDate = (a: TodoFrontMatter, b: TodoFrontMatter) => {
+		const aClosed = isTodoClosed(a.status);
+		const bClosed = isTodoClosed(b.status);
+		if (aClosed !== bClosed) return aClosed ? 1 : -1;
+		const aPri = a.priority ?? Number.POSITIVE_INFINITY;
+		const bPri = b.priority ?? Number.POSITIVE_INFINITY;
+		if (aPri !== bPri) return aPri - bPri;
+		return (a.created_at || "").localeCompare(b.created_at || "");
+	};
+
+	// Collect all todos that should appear in this section:
+	//   - todos explicitly in the section
+	//   - closed children of open parents in the section (pulled from allTodos)
+	const seen = new Set<string>();
+	const enrichedTodos: TodoFrontMatter[] = [];
+	for (const t of sectionTodos) {
+		enrichedTodos.push(t);
+		seen.add(t.id);
+	}
+	// Pull in children from allTodos whose parent is in this section but they aren't
+	for (const t of allTodos) {
+		if (seen.has(t.id)) continue;
+		if (t.parent && sectionIds.has(t.parent)) {
+			enrichedTodos.push(t);
+			seen.add(t.id);
+		}
+	}
+
+	for (const t of enrichedTodos) {
+		if (!t.parent) {
+			roots.push(t);
+		} else if (sectionIds.has(t.parent)) {
+			// Parent is in the same section — this is a tree child
+			if (!childrenMap.has(t.parent)) childrenMap.set(t.parent, []);
+			childrenMap.get(t.parent)!.push(t);
+		} else if (allTodoIds.has(t.parent)) {
+			// Parent exists but in a different section — show as root
+			roots.push(t);
+		} else {
+			// Parent doesn't exist at all — orphan
+			orphans.push(t);
+		}
+	}
+
+	roots.sort(sortByNotClosedPriorityDate);
+	orphans.sort(sortByNotClosedPriorityDate);
+	for (const children of childrenMap.values()) {
+		children.sort(sortByNotClosedPriorityDate);
+	}
+
+	const buildNode = (todo: TodoFrontMatter, isOrphan: boolean): TodoTreeNode => ({
+		todo,
+		children: (childrenMap.get(todo.id) || []).map((c) => buildNode(c, false)),
+		isOrphan,
+	});
+
+	return [
+		...roots.map((t) => buildNode(t, false)),
+		...orphans.map((t) => buildNode(t, true)),
+	];
+}
+
+/**
+ * Render a TodoTreeNode list as flat lines with ASCII tree prefixes.
+ * `baseIndent` is the prefix for the current nesting level (e.g. "  " for root in section).
+ * `formatLine` turns a todo + tree prefix into a display string.
+ */
+function renderTreeLines(
+	nodes: TodoTreeNode[],
+	baseIndent: string,
+	lines: string[],
+	formatLine: (prefix: string, connector: string, todo: TodoFrontMatter) => void,
+	isRootLevel = true,
+): void {
+	for (let i = 0; i < nodes.length; i += 1) {
+		const node = nodes[i];
+		const isLast = i === nodes.length - 1;
+
+		if (node.isOrphan) {
+			// Orphan: use ¿ as connector instead of tree chars
+			formatLine(baseIndent, "¿ ", node.todo);
+		} else if (isRootLevel) {
+			// Root level inside a section — no connector, just indent
+			formatLine(baseIndent, "", node.todo);
+		} else {
+			const connector = isLast ? "└── " : "├── ";
+			formatLine(baseIndent, connector, node.todo);
+		}
+
+		if (node.children.length > 0) {
+			// Compute child indent for deeper levels
+			const childBase = isRootLevel
+				? baseIndent
+				: baseIndent + (isLast ? "    " : "│   ");
+			renderTreeLines(node.children, childBase, lines, formatLine, false);
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Heading formatters
+// ---------------------------------------------------------------------------
 
 function formatTodoHeading(todo: TodoFrontMatter): string {
 	const tagText = todo.tags.length ? ` [${todo.tags.join(", ")}]` : "";
-	return `${formatTodoId(todo.id)}${formatPriorityTag(todo)} ${getTodoTitle(todo)}${tagText}${formatAssignmentSuffix(todo)}`;
+	const status = ` (${getTodoStatus(todo)})`;
+	return `${formatTodoId(todo.id)}${formatPriorityTag(todo)} ${getTodoTitle(todo)}${tagText}${formatAssignmentSuffix(todo)}${status}`;
 }
 
 function buildRefinePrompt(todoId: string, title: string): string {
@@ -1204,9 +1365,11 @@ export function splitTodosByAssignment(todos: TodoFrontMatter[]): {
 	return { assignedTodos, openTodos, closedTodos };
 }
 
-export function formatTodoList(todos: TodoFrontMatter[]): string {
+export function formatTodoList(todos: TodoFrontMatter[], allTodos?: TodoFrontMatter[]): string {
 	if (!todos.length) return "No todos.";
 
+	const all = allTodos ?? todos;
+	const allTodoIds = new Set(all.map((t) => t.id));
 	const { assignedTodos, openTodos, closedTodos } = splitTodosByAssignment(todos);
 	const lines: string[] = [];
 	const pushSection = (label: string, sectionTodos: TodoFrontMatter[]) => {
@@ -1215,9 +1378,10 @@ export function formatTodoList(todos: TodoFrontMatter[]): string {
 			lines.push("  none");
 			return;
 		}
-		for (const todo of sectionTodos) {
-			lines.push(`  ${formatTodoHeading(todo)}`);
-		}
+		const tree = buildTodoTree(sectionTodos, all, allTodoIds);
+		renderTreeLines(tree, "  ", lines, (prefix, connector, todo) => {
+			lines.push(`${prefix}${connector}${formatTodoHeading(todo)}`);
+		});
 	};
 
 	pushSection("Assigned todos", assignedTodos);
@@ -1269,9 +1433,12 @@ function renderTodoList(
 	todos: TodoFrontMatter[],
 	expanded: boolean,
 	currentSessionId?: string,
+	allTodos?: TodoFrontMatter[],
 ): string {
 	if (!todos.length) return theme.fg("dim", "No todos");
 
+	const all = allTodos ?? todos;
+	const allTodoIds = new Set(all.map((t) => t.id));
 	const { assignedTodos, openTodos, closedTodos } = splitTodosByAssignment(todos);
 	const lines: string[] = [];
 	const pushSection = (label: string, sectionTodos: TodoFrontMatter[]) => {
@@ -1280,10 +1447,15 @@ function renderTodoList(
 			lines.push(theme.fg("dim", "  none"));
 			return;
 		}
+		const tree = buildTodoTree(sectionTodos, all, allTodoIds);
 		const maxItems = expanded ? sectionTodos.length : Math.min(sectionTodos.length, 3);
-		for (let i = 0; i < maxItems; i++) {
-			lines.push(`  ${renderTodoHeading(theme, sectionTodos[i], currentSessionId)}`);
-		}
+		let count = 0;
+		renderTreeLines(tree, "  ", lines, (prefix, connector, todo) => {
+			count += 1;
+			if (count > maxItems) return; // skip rendering beyond max
+			const treePrefix = prefix + theme.fg("dim", connector);
+			lines.push(`${treePrefix}${renderTodoHeading(theme, todo, currentSessionId)}`);
+		});
 		if (!expanded && sectionTodos.length > maxItems) {
 			lines.push(theme.fg("dim", `  ... ${sectionTodos.length - maxItems} more`));
 		}
@@ -1516,7 +1688,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(listedTodos) }],
-						details: { action: "list", todos: listedTodos, currentSessionId },
+						details: { action: "list", todos: listedTodos, allTodos: todos, currentSessionId },
 					};
 				}
 
@@ -1525,7 +1697,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(todos) }],
-						details: { action: "list-all", todos, currentSessionId },
+						details: { action: "list-all", todos, allTodos: todos, currentSessionId },
 					};
 				}
 
@@ -1858,7 +2030,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 			}
 
 			if (details.action === "list" || details.action === "list-all") {
-				let text = renderTodoList(theme, details.todos, expanded, details.currentSessionId);
+				let text = renderTodoList(theme, details.todos, expanded, details.currentSessionId, details.allTodos);
 				if (!expanded) {
 					const { closedTodos } = splitTodosByAssignment(details.todos);
 					if (closedTodos.length) {
@@ -1909,7 +2081,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 			const searchTerm = (args ?? "").trim();
 
 			if (!ctx.hasUI) {
-				const text = formatTodoList(todos);
+				const text = formatTodoList(todos, todos);
 				console.log(text);
 				return;
 			}

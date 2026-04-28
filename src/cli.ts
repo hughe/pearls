@@ -278,8 +278,8 @@ function printJsonTodo(todo: TodoRecord): void {
 	process.stdout.write(serializeTodoForAgent(todo) + "\n");
 }
 
-function printHumanList(todos: TodoFrontMatter[]): void {
-	process.stdout.write(formatTodoList(todos) + "\n");
+function printHumanList(todos: TodoFrontMatter[], allTodos?: TodoFrontMatter[]): void {
+	process.stdout.write(formatTodoList(todos, allTodos) + "\n");
 }
 
 function printHumanTodo(todo: TodoRecord): void {
@@ -291,9 +291,7 @@ function printHumanTodo(todo: TodoRecord): void {
 		`${formatTodoId(todo.id)} ${todo.title || "(untitled)"}${tagText}${assignText}\n`,
 	);
 	process.stdout.write(`status: ${todo.status || "open"}\n`);
-	if (todo.priority !== undefined) {
-		process.stdout.write(`priority: ${todo.priority}\n`);
-	}
+	process.stdout.write(`priority: ${todo.priority !== undefined ? todo.priority : "?"}\n`);
 	if (todo.parent) {
 		process.stdout.write(`parent: ${formatTodoId(todo.parent)}\n`);
 	}
@@ -573,7 +571,7 @@ async function cmdList(
 	if (run.json) {
 		printJsonList(listed);
 	} else {
-		printHumanList(listed);
+		printHumanList(listed, todos);
 	}
 }
 
@@ -643,7 +641,7 @@ async function cmdSearch(run: RunContext): Promise<void> {
 	}
 
 	for (const todo of matches) {
-		const pri = todo.priority !== undefined ? `[P${todo.priority}] ` : "";
+		const pri = todo.priority !== undefined ? `[P${todo.priority}] ` : "[P?] ";
 		process.stdout.write(
 			`${formatTodoId(todo.id)}  ${pri}${todo.title || "(untitled)"}\n`,
 		);
