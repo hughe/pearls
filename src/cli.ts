@@ -370,6 +370,9 @@ COMMANDS
                          to release someone else's.
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
+  refine <id>           Print a refinement prompt for the todo. The agent
+                         should ask the user clarifying questions before
+                         rewriting the todo.
   quickstart             Print an agent-oriented guide to using pearls.
   import-beads <file>    Import a beads issues.jsonl file. Creates one
                          pearl per issue (description first in body, beads
@@ -562,7 +565,9 @@ async function main(argv: string[]): Promise<void> {
 			return;
 		case "path":
 			return cmdPath(run);
-		case "quickstart":
+		case "refine":
+			return await cmdRefine(run);
+	case "quickstart":
 			process.stdout.write(QUICKSTART);
 			return;
 		case "import-beads":
@@ -900,6 +905,30 @@ async function cmdImportBeads(run: RunContext): Promise<void> {
 function cmdPath(run: RunContext): void {
 	const id = resolveId(run);
 	process.stdout.write(path.resolve(getTodoPath(run.todosDir, id)) + "\n");
+}
+
+// ---- refine ---------------------------------------------------------------
+
+async function cmdRefine(run: RunContext): Promise<void> {
+	const id = resolveId(run);
+	const filePath = getTodoPath(run.todosDir, id);
+	const todo = await ensureTodoExists(filePath, id);
+	if (!todo) fail(`Todo ${formatTodoId(id)} not found`, 1);
+
+	const title = todo.title || "(untitled)";
+	const prompt =
+		`Let's refine task ${formatTodoId(id)} "${title}": ` +
+		"Ask me for the missing details needed to refine the todo together. " +
+		"Do not rewrite the todo yet and do not make assumptions. " +
+		"Ask clear, concrete questions and wait for my answers before drafting any structured description.";
+
+	if (run.json) {
+		process.stdout.write(
+			JSON.stringify({ id: formatTodoId(id), title, refine_prompt: prompt }) + "\n",
+		);
+	} else {
+		process.stdout.write(prompt + "\n");
+	}
 }
 
 // ---------------------------------------------------------------------------
