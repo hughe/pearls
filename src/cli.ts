@@ -36,6 +36,7 @@ import {
 	generateTodoId,
 	getTodoPath,
 	getTodosDir,
+	hasPiTodoPathDeprecation,
 	listTodos,
 	readTodoSettings,
 	releaseTodoAssignment,
@@ -119,12 +120,15 @@ const SHORT_VALUE_FLAGS: Record<string, string> = {
 	c: "child-of",
 };
 
+import { VERSION } from "./version.js";
+
 const KNOWN_BOOL_FLAGS = new Set([
 	"json",
 	"all",
 	"force",
 	"closed",
 	"help",
+	"version",
 	"stdin-body",
 	"quiet",
 	"no-gc",
@@ -318,8 +322,12 @@ USAGE
   pearls [global-flags] <command> [flags] [args]
 
 GLOBAL FLAGS
-  --todo-dir <path>      Override the todos directory (default: .pi/todos or
-                         $PI_TODO_PATH). Exported as PI_TODO_PATH for todo.ts.
+  --todo-dir <path>      Override the todos directory (default: walk up from
+                         cwd looking for .pi/todos, or $PEARLS_DIR).
+  $PEARLS_DIR            Path to the todos directory (alternative to
+                         --todo-dir).
+  $PI_TODO_PATH          Deprecated alias for PEARLS_DIR. Use PEARLS_DIR
+                         instead.
   --session <id>         Session id used for claim/release (default:
                          $PEARLS_SESSION or cli:<user>@<host>).
   --json                 Emit stable JSON (identical to Pi's todo tool output),
@@ -327,6 +335,7 @@ GLOBAL FLAGS
   --no-gc                Skip the normal startup garbage collection of old
                          closed todos.
   -h, --help             Show this help.
+      --version          Print version and exit.
 
 COMMANDS
   list                   List open + assigned todos (default human output).
@@ -476,15 +485,24 @@ async function main(argv: string[]): Promise<void> {
 		throw err;
 	}
 
+	if (parsed.flags.version) {
+		process.stdout.write(VERSION + "\n");
+		return;
+	}
 	if (parsed.flags.help || parsed.command === "help" || parsed.command === undefined) {
 		process.stdout.write(HELP);
 		return;
 	}
 
-	// Resolve todos dir. todo.ts reads PI_TODO_PATH from env, so if the user
-	// passes --todo-dir we set it before calling getTodosDir().
+	// Resolve todos dir. --todo-dir sets PEARLS_DIR (highest priority).
+	// PI_TODO_PATH is a deprecated alias; warn if it is set without --todo-dir.
 	if (typeof parsed.flags["todo-dir"] === "string") {
-		process.env.PI_TODO_PATH = parsed.flags["todo-dir"];
+		process.env.PEARLS_DIR = parsed.flags["todo-dir"];
+	} else if (hasPiTodoPathDeprecation()) {
+		process.stderr.write(
+			"pearls: warning: PI_TODO_PATH is deprecated. " +
+			"Use PEARLS_DIR instead.\n",
+		);
 	}
 	const cwd = process.cwd();
 	const todosDir = getTodosDir(cwd);

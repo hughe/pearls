@@ -1,7 +1,8 @@
 // @ts-nocheck -- pearls vendored copy: type-checked in its original Pi source tree
 /**
- * This extension stores todo items as files under <todo-dir> (defaults to .pi/todos,
- * or the path in PI_TODO_PATH).  Each todo is a standalone markdown file named
+ * This extension stores todo items as files under <todo-dir> (defaults to the
+ * nearest `.pi/todos` directory found by walking up from cwd, or the path in
+ * PEARLS_DIR / PI_TODO_PATH).  Each todo is a standalone markdown file named
  * <id>.md and an optional <id>.lock file is used while a session is editing it.
  *
  * File format in .pi/todos:
@@ -35,7 +36,7 @@ import { StringEnum } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import crypto from "node:crypto";
 import {
 	Container,
@@ -55,7 +56,8 @@ import {
 } from "@mariozechner/pi-tui";
 
 const TODO_DIR_NAME = ".pi/todos";
-const TODO_PATH_ENV = "PI_TODO_PATH";
+const TODO_PATH_ENV = "PI_TODO_PATH"; // deprecated
+const PEARLS_DIR_ENV = "PEARLS_DIR";
 const TODO_SETTINGS_NAME = "settings.json";
 const TODO_ID_PREFIX = "TODO-";
 const TODO_ID_PATTERN = /^[a-f0-9]{8}$/i;
@@ -774,19 +776,68 @@ class TodoDetailOverlayComponent {
 	}
 }
 
-export function getTodosDir(cwd: string): string {
-	const overridePath = process.env[TODO_PATH_ENV];
-	if (overridePath && overridePath.trim()) {
-		return path.resolve(cwd, overridePath.trim());
+/**
+ * Walk up from `start` looking for a directory that contains `.pi/todos`.
+ * Returns the `.pi/todos` path if found, or null if we reach the filesystem root.
+ */
+function findTodosDirUpward(start: string): string | null {
+	let dir = path.resolve(start);
+	while (true) {
+		const candidate = path.join(dir, TODO_DIR_NAME);
+		try {
+			const stat = statSync(candidate);
+			if (stat.isDirectory()) return candidate;
+		} catch {
+			// not found at this level, keep walking
+		}
+		const parent = path.dirname(dir);
+		if (parent === dir) return null; // reached filesystem root
+		dir = parent;
 	}
-	return path.resolve(cwd, TODO_DIR_NAME);
+}
+
+/** Returns true if the deprecated PI_TODO_PATH env var is set. */
+export function hasPiTodoPathDeprecation(): boolean {
+	const v = process.env[TODO_PATH_ENV];
+	return Boolean(v && v.trim());
+}
+
+export function getTodosDir(cwd: string): string {
+	// 1. PEARLS_DIR — points directly to the todos directory.
+	const pearlsDir = process.env[PEARLS_DIR_ENV];
+	if (pearlsDir && pearlsDir.trim()) {
+		return path.resolve(cwd, pearlsDir.trim());
+	}
+	// 2. Deprecated PI_TODO_PATH — same semantics as PEARLS_DIR.
+	const legacyPath = process.env[TODO_PATH_ENV];
+	if (legacyPath && legacyPath.trim()) {
+		return path.resolve(cwd, legacyPath.trim());
+	}
+	// 3. Walk up from cwd.
+	const found = findTodosDirUpward(cwd);
+	if (found) return found;
+	// 4. Not found — throw a clear error.
+	throw new Error(
+		`No .pi/todos directory found in ${cwd} or any parent directory.\n` +
+		`Create one with: mkdir -p .pi/todos\n` +
+		`Or set PEARLS_DIR to the todos directory path.`,
+	);
 }
 
 function getTodosDirLabel(cwd: string): string {
-	const overridePath = process.env[TODO_PATH_ENV];
-	if (overridePath && overridePath.trim()) {
-		return path.resolve(cwd, overridePath.trim());
+	// 1. PEARLS_DIR.
+	const pearlsDir = process.env[PEARLS_DIR_ENV];
+	if (pearlsDir && pearlsDir.trim()) {
+		return path.resolve(cwd, pearlsDir.trim());
 	}
+	// 2. Deprecated PI_TODO_PATH.
+	const legacyPath = process.env[TODO_PATH_ENV];
+	if (legacyPath && legacyPath.trim()) {
+		return path.resolve(cwd, legacyPath.trim());
+	}
+	// 3. Walk up (label only — don't throw, fall back to default label).
+	const found = findTodosDirUpward(cwd);
+	if (found) return found;
 	return TODO_DIR_NAME;
 }
 

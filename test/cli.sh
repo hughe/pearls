@@ -47,7 +47,7 @@ esac
 WORK="$(mktemp -d -t pearls-test.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 
-export PI_TODO_PATH="$WORK/todos"
+export PEARLS_DIR="$WORK/todos"
 # Deterministic session id so claim/release assertions are stable.
 export PEARLS_SESSION="test-session"
 
@@ -147,7 +147,7 @@ assert_contains "$out" "--json" "quickstart mentions --json output"
 
 section "dir command before any todos"
 out="$(pearls dir)"
-assert_eq "$out" "$WORK/todos" "dir resolves to \$PI_TODO_PATH"
+assert_eq "$out" "$WORK/todos" "dir resolves to \$PEARLS_DIR"
 
 # A pearls invocation will ensure the dir exists.
 [[ -d "$WORK/todos" ]] && pass "todos dir auto-created" || fail "todos dir auto-created"

@@ -1,5 +1,6 @@
 node_modules
 dist
+src/version.ts
 *.log
 .DS_Store
 # Lock files inside .pi/todos are ephemeral; todos themselves are committed.

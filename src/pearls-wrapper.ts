@@ -50,6 +50,7 @@ export const clearAssignmentIfClosed: (t: TodoFrontMatter) => void =
 	todo.clearAssignmentIfClosed;
 
 export const getTodosDir: (cwd: string) => string = todo.getTodosDir;
+export const hasPiTodoPathDeprecation: () => boolean = todo.hasPiTodoPathDeprecation;
 export const getTodoPath: (todosDir: string, id: string) => string =
 	todo.getTodoPath;
 
