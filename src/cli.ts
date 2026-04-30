@@ -374,6 +374,9 @@ COMMANDS
                          to type=Memory entries).
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
+  summarize-memories   List memory index (title + ID only, no bodies).
+                         --closed to include closed/stale memories.
+                         Use --json for machine-readable output.
   refine <id>           Print a refinement prompt for the todo. The agent
                          should ask the user clarifying questions before
                          rewriting the todo.
@@ -571,6 +574,8 @@ async function main(argv: string[]): Promise<void> {
 			return;
 		case "path":
 			return cmdPath(run);
+	case "summarize-memories":
+			return await cmdSummarizeMemories(run);
 		case "refine":
 			return await cmdRefine(run);
 	case "quickstart":
@@ -927,6 +932,29 @@ async function cmdImportBeads(run: RunContext): Promise<void> {
 function cmdPath(run: RunContext): void {
 	const id = resolveId(run);
 	process.stdout.write(path.resolve(getTodoPath(run.todosDir, id)) + "\n");
+}
+
+// ---- summarize-memories ---------------------------------------------------
+
+async function cmdSummarizeMemories(run: RunContext): Promise<void> {
+	const allTodos = await listTodos(run.todosDir);
+	const includeClosed = Boolean(run.flags.closed);
+	let memories = allTodos.filter((t) => t.type === "memory");
+	if (!includeClosed) {
+		memories = memories.filter((t) => t.status !== "closed" && t.status !== "done");
+	}
+
+	if (run.json) {
+		const entries = memories.map((m) => ({ id: formatTodoId(m.id), title: m.title }));
+		process.stdout.write(JSON.stringify(entries, null, 2) + "\n");
+	} else {
+		if (memories.length === 0) {
+			return;
+		}
+		for (const m of memories) {
+			process.stdout.write(`${formatTodoId(m.id)} ${m.title || "(untitled)"}\n`);
+		}
+	}
 }
 
 // ---- refine ---------------------------------------------------------------

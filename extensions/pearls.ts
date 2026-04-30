@@ -1741,11 +1741,46 @@ export async function deleteTodo(
 }
 
 export default function todosExtension(pi: ExtensionAPI) {
+	let needsMemoryIndex = false;
+
+	const buildMemoryIndex = async (cwd: string): Promise<string | null> => {
+		const todosDir = getTodosDir(cwd);
+		let allTodos: TodoFrontMatter[];
+		try {
+			allTodos = await listTodos(todosDir);
+		} catch {
+			return null;
+		}
+		const openMemories = allTodos.filter((t) => t.type === "memory" && !isTodoClosed(t.status));
+		if (openMemories.length === 0) return null;
+		const lines = openMemories.map((m) => `${formatTodoId(m.id)} ${m.title || "(untitled)"}`);
+		return `## Pearl Memories\n\nYou have the following memories. Use the pearls tool with action "get" and the ID to retrieve the full body if needed.\n\n${lines.join("\n")}`;
+	};
+
 	pi.on("session_start", async (_event, ctx) => {
 		const todosDir = getTodosDir(ctx.cwd);
 		await ensureTodosDir(todosDir);
 		const settings = await readTodoSettings(todosDir);
 		await garbageCollectTodos(todosDir, settings);
+		needsMemoryIndex = true;
+	});
+
+	pi.on("session_compact", async (_event, _ctx) => {
+		needsMemoryIndex = true;
+	});
+
+	pi.on("before_agent_start", async (_event, ctx) => {
+		if (!needsMemoryIndex) return;
+		needsMemoryIndex = false;
+		const index = await buildMemoryIndex(ctx.cwd);
+		if (!index) return;
+		return {
+			message: {
+				customType: "pearls-memory-index",
+				content: index,
+				display: false,
+			},
+		};
 	});
 
 	const todosDirLabel = getTodosDirLabel(process.cwd());
