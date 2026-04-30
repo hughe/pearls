@@ -111,6 +111,7 @@ const KNOWN_STRING_FLAGS = new Set([
 	"parent",
 	"fuzzy",
 	"child-of",
+	"type",
 ]);
 
 // Short flags that take a value, mapped to their long-form key.
@@ -354,7 +355,8 @@ COMMANDS
   show <id>              Alias for get.
   create <title...>      Create a new todo. Flags: --tag <t> (repeatable),
                          --status <s>, --body <text>, --body-file <file>,
-                         --stdin-body, --priority <0-4>, --parent <id>.
+                         --stdin-body, --priority <0-4>, --parent <id>,
+                         --type <todo|memory> (default: todo).
   update <id>            Update a todo. Flags: --title, --status, --tag
                          (repeatable, replaces), --body, --body-file,
                          --stdin-body, --priority <0-4>, --parent <id>
@@ -368,6 +370,8 @@ COMMANDS
                          steal from another session.
   release <id>           Release the current session's assignment. --force
                          to release someone else's.
+  memories               List memories (same format as list, but filtered
+                         to type=Memory entries).
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
   refine <id>           Print a refinement prompt for the todo. The agent
@@ -534,6 +538,8 @@ async function main(argv: string[]): Promise<void> {
 			return await cmdList(run, { includeClosed: false });
 		case "list-all":
 			return await cmdList(run, { includeClosed: true });
+		case "memories":
+			return await cmdMemories(run);
 		case "search":
 			return await cmdSearch(run);
 		case "get":
@@ -583,7 +589,8 @@ async function cmdList(
 	run: RunContext,
 	opts: { includeClosed: boolean },
 ): Promise<void> {
-	const todos = await listTodos(run.todosDir);
+	const allTodos = await listTodos(run.todosDir);
+	const todos = allTodos.filter((t) => t.type !== "Memory");
 	const listed = opts.includeClosed
 		? todos
 		: (() => {
@@ -595,6 +602,19 @@ async function cmdList(
 		printJsonList(listed);
 	} else {
 		printHumanList(listed, todos);
+	}
+}
+
+// ---- memories --------------------------------------------------------------
+
+async function cmdMemories(run: RunContext): Promise<void> {
+	const allTodos = await listTodos(run.todosDir);
+	const memories = allTodos.filter((t) => t.type === "Memory");
+
+	if (run.json) {
+		printJsonList(memories);
+	} else {
+		printHumanList(memories, memories);
 	}
 }
 
@@ -720,6 +740,7 @@ async function cmdCreate(run: RunContext): Promise<void> {
 
 	const id = await generateTodoId(run.todosDir);
 	const filePath = getTodoPath(run.todosDir, id);
+	const todoType = typeof run.flags.type === "string" && run.flags.type.toLowerCase() === "memory" ? "Memory" as const : undefined;
 	const todo: TodoRecord = {
 		id,
 		title,
@@ -728,6 +749,7 @@ async function cmdCreate(run: RunContext): Promise<void> {
 		created_at: new Date().toISOString(),
 		priority,
 		parent: parent ?? undefined,
+		type: todoType,
 		body,
 	};
 
