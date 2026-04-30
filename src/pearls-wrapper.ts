@@ -14,7 +14,7 @@
  */
 import * as todo from "../extensions/pearls.js";
 
-export type TodoType = "ToDo" | "Memory";
+export type TodoType = "todo" | "memory";
 
 export interface TodoFrontMatter {
 	id: string;
