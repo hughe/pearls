@@ -2432,4 +2432,127 @@ export default function todosExtension(pi: ExtensionAPI) {
 		},
 	});
 
+	// /pearls rem — create a memory via inline input
+	pi.registerCommand("pearls rem", {
+		description: "Create a pearl memory",
+		handler: async (args, ctx) => {
+			const todosDir = getTodosDir(ctx.cwd);
+
+			if (!ctx.hasUI) {
+				// Fallback: use the text from args as the memory
+				const text = (args ?? "").trim();
+				if (!text) {
+					console.log("Usage: /pearls rem <memory text>");
+					return;
+				}
+				await ensureTodosDir(todosDir);
+				const id = await generateTodoId(todosDir);
+				const filePath = getTodoPath(todosDir, id);
+				const todo: TodoRecord = {
+					id,
+				title: text.length > 80 ? text.slice(0, 77) + "..." : text,
+				tags: [],
+				status: "open",
+				created_at: new Date().toISOString(),
+				type: "memory",
+				body: `# ${text.length > 80 ? text.slice(0, 77) + "..." : text}\n\n## Description\n\n${text}\n`,
+			};
+				await writeTodoFile(filePath, todo);
+				console.log(`Created memory ${formatTodoId(id)}`);
+				return;
+			}
+
+			await ctx.ui.custom<void>((tui, theme, keybindings, done) => {
+				const input = new Input();
+				let focused = true;
+
+				const createMemory = async () => {
+					const text = input.getValue().trim();
+					if (!text) {
+						done();
+						return;
+					}
+
+					const title = text.length > 80 ? text.slice(0, 77) + "..." : text;
+					await ensureTodosDir(todosDir);
+					const id = await generateTodoId(todosDir);
+					const filePath = getTodoPath(todosDir, id);
+					const todo: TodoRecord = {
+						id,
+					title,
+					tags: [],
+					status: "open",
+					created_at: new Date().toISOString(),
+					type: "memory",
+					body: `# ${title}\n\n## Description\n\n${text}\n`,
+				};
+					await writeTodoFile(filePath, todo);
+					ctx.ui.notify(`Created memory ${formatTodoId(id)}`, "info");
+					done();
+				};
+
+				input.onSubmit = () => {
+					void createMemory();
+				};
+
+				const component = {
+					get focused() {
+						return focused;
+					},
+					set focused(value: boolean) {
+						focused = value;
+						input.focused = value;
+					},
+					render(width: number): string[] {
+						const innerWidth = Math.max(10, width - 2);
+						const lines: string[] = [];
+						const borderColor = (text: string) => theme.fg("borderMuted", text);
+
+						lines.push(borderColor(`┌${"─".repeat(innerWidth)}┐`));
+
+						const headerText = " Create a memory ";
+						const headerWidth = visibleWidth(headerText);
+						const leftW = Math.max(0, Math.floor((innerWidth - headerWidth) / 2));
+						const rightW = Math.max(0, innerWidth - headerWidth - leftW);
+						const headerLine =
+							theme.fg("borderMuted", "─".repeat(leftW)) +
+							theme.fg("accent", headerText) +
+							theme.fg("borderMuted", "─".repeat(rightW));
+						lines.push(borderColor("│") + truncateToWidth(headerLine, innerWidth) + borderColor("│"));
+
+						lines.push(borderColor("│") + " ".repeat(innerWidth) + borderColor("│"));
+
+						const inputLines = input.render(innerWidth - 2);
+						for (const line of inputLines) {
+							const padding = Math.max(0, innerWidth - 2 - visibleWidth(line));
+							lines.push(borderColor("│") + " " + truncateToWidth(line, innerWidth - 2) + " ".repeat(padding) + " " + borderColor("│"));
+						}
+
+						lines.push(borderColor("│") + " ".repeat(innerWidth) + borderColor("│"));
+
+						const hint = theme.fg("dim", "Enter to save • Esc to cancel");
+						const hintPadding = Math.max(0, innerWidth - visibleWidth(hint));
+						lines.push(borderColor("│") + truncateToWidth(hint, innerWidth) + " ".repeat(hintPadding) + borderColor("│"));
+
+						lines.push(borderColor(`└${"─".repeat(innerWidth)}┘`));
+						return lines.map((line) => truncateToWidth(line, width));
+					},
+					invalidate(): void {
+						// Input invalidation handled by render
+					},
+					handleInput(data: string): void {
+						if (keybindings.matches(data, "tui.select.cancel")) {
+							done();
+							return;
+						}
+						input.handleInput(data);
+						tui.requestRender();
+					},
+				};
+
+				return component;
+			});
+		},
+	});
+
 }
