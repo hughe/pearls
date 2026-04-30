@@ -280,8 +280,10 @@ class TodoSelectorComponent extends Container implements Focusable {
 	private searchInput: Input;
 	private listContainer: Container;
 	private allTodos: TodoFrontMatter[];
+	private allMemories: TodoFrontMatter[];
 	private filteredTodos: TodoFrontMatter[];
 	private selectedIndex = 0;
+	private viewMode: "todos" | "memories" = "todos";
 	private onSelectCallback: (todo: TodoFrontMatter) => void;
 	private onCancelCallback: () => void;
 	private tui: TUI;
@@ -317,7 +319,9 @@ class TodoSelectorComponent extends Container implements Focusable {
 		this.keybindings = keybindings;
 		this.currentSessionId = currentSessionId;
 		this.allTodos = todos;
-		this.filteredTodos = todos;
+		this.allMemories = todos.filter((t) => t.type === "memory");
+		this.allTodos = todos.filter((t) => t.type !== "memory");
+		this.filteredTodos = this.allTodos;
 		this.onSelectCallback = onSelect;
 		this.onCancelCallback = onCancel;
 
@@ -354,7 +358,8 @@ class TodoSelectorComponent extends Container implements Focusable {
 	}
 
 	setTodos(todos: TodoFrontMatter[]): void {
-		this.allTodos = todos;
+		this.allMemories = todos.filter((t) => t.type === "memory");
+		this.allTodos = todos.filter((t) => t.type !== "memory");
 		this.updateHeader();
 		this.applyFilter(this.searchInput.getValue());
 		this.tui.requestRender();
@@ -365,17 +370,20 @@ class TodoSelectorComponent extends Container implements Focusable {
 	}
 
 	private updateHeader(): void {
-		const openCount = this.allTodos.filter((todo) => !isTodoClosed(todo.status)).length;
-		const closedCount = this.allTodos.length - openCount;
-		const title = `Todos (${openCount} open, ${closedCount} closed)`;
+		const items = this.viewMode === "memories" ? this.allMemories : this.allTodos;
+		const openCount = items.filter((todo) => !isTodoClosed(todo.status)).length;
+		const closedCount = items.length - openCount;
+		const label = this.viewMode === "memories" ? "Memories" : "Todos";
+		const title = `${label} (${openCount} open, ${closedCount} closed)`;
 		this.headerText.setText(this.theme.fg("accent", this.theme.bold(title)));
 	}
 
 	private updateHints(): void {
+		const viewHint = this.viewMode === "memories" ? "Ctrl+Shift+M todos" : "Ctrl+Shift+M memories";
 		this.hintText.setText(
 			this.theme.fg(
 				"dim",
-				"Type to search • ↑↓ select • Enter actions • Ctrl+Shift+W work • Ctrl+Shift+R refine • Esc close",
+			`Type to search • ↑↓ select • Enter actions • Ctrl+Shift+W work • Ctrl+Shift+R refine • ${viewHint} • Esc close`,
 			),
 		);
 	}
@@ -392,7 +400,8 @@ class TodoSelectorComponent extends Container implements Focusable {
 	}
 
 	private applyFilter(query: string): void {
-		this.filteredTodos = filterTodos(this.allTodos, query);
+		const source = this.viewMode === "memories" ? this.allMemories : this.allTodos;
+		this.filteredTodos = filterTodos(source, query);
 		const flat = this.getFlatTreeTodos();
 		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, flat.length - 1));
 		this.updateList();
@@ -402,7 +411,8 @@ class TodoSelectorComponent extends Container implements Focusable {
 		this.listContainer.clear();
 
 		if (this.filteredTodos.length === 0) {
-			this.listContainer.addChild(new Text(this.theme.fg("muted", "  No matching todos"), 0, 0));
+			const emptyLabel = this.viewMode === "memories" ? "memories" : "todos";
+			this.listContainer.addChild(new Text(this.theme.fg("muted", `  No matching ${emptyLabel}`), 0, 0));
 			return;
 		}
 
@@ -492,6 +502,15 @@ class TodoSelectorComponent extends Container implements Focusable {
 		if (matchesKey(keyData, Key.ctrlShift("w"))) {
 			const selected = flat[this.selectedIndex];
 			if (selected && this.onQuickAction) this.onQuickAction(selected, "work");
+			return;
+		}
+		if (matchesKey(keyData, Key.ctrlShift("m"))) {
+			this.viewMode = this.viewMode === "todos" ? "memories" : "todos";
+			this.selectedIndex = 0;
+			this.updateHeader();
+			this.updateHints();
+			this.applyFilter(this.searchInput.getValue());
+			this.updateList();
 			return;
 		}
 		this.searchInput.handleInput(keyData);
