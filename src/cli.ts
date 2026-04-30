@@ -590,7 +590,7 @@ async function cmdList(
 	opts: { includeClosed: boolean },
 ): Promise<void> {
 	const allTodos = await listTodos(run.todosDir);
-	const todos = allTodos.filter((t) => t.type !== "Memory");
+	const todos = allTodos.filter((t) => t.type !== "memory");
 	const listed = opts.includeClosed
 		? todos
 		: (() => {
@@ -609,7 +609,7 @@ async function cmdList(
 
 async function cmdMemories(run: RunContext): Promise<void> {
 	const allTodos = await listTodos(run.todosDir);
-	const memories = allTodos.filter((t) => t.type === "Memory");
+	const memories = allTodos.filter((t) => t.type === "memory");
 
 	if (run.json) {
 		printJsonList(memories);
@@ -740,7 +740,7 @@ async function cmdCreate(run: RunContext): Promise<void> {
 
 	const id = await generateTodoId(run.todosDir);
 	const filePath = getTodoPath(run.todosDir, id);
-	const todoType = typeof run.flags.type === "string" && run.flags.type.toLowerCase() === "memory" ? "Memory" as const : undefined;
+	const todoType = typeof run.flags.type === "string" && run.flags.type.toLowerCase() === "memory" ? "memory" as const : undefined;
 	const todo: TodoRecord = {
 		id,
 		title,

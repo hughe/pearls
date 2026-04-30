@@ -67,7 +67,7 @@ const DEFAULT_TODO_SETTINGS = {
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
-export type TodoType = "ToDo" | "Memory";
+export type TodoType = "todo" | "memory";
 
 export interface TodoFrontMatter {
 	id: string;
@@ -956,7 +956,7 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		if (typeof parsed.parent === "string" && TODO_ID_PATTERN.test(parsed.parent)) {
 			data.parent = parsed.parent.toLowerCase();
 		}
-		if (typeof parsed.type === "string" && (parsed.type === "Memory" || parsed.type === "ToDo")) {
+		if (typeof parsed.type === "string" && (parsed.type === "memory" || parsed.type === "todo")) {
 			data.type = parsed.type;
 		}
 	} catch {
@@ -1051,7 +1051,7 @@ function serializeTodo(todo: TodoRecord): string {
 			assigned_to_session: todo.assigned_to_session || undefined,
 			priority: todo.priority,
 			parent: todo.parent || undefined,
-			...(todo.type && todo.type !== "ToDo" ? { type: todo.type } : {}),
+			...(todo.type && todo.type !== "todo" ? { type: todo.type } : {}),
 		},
 		null,
 		2,
@@ -1748,7 +1748,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 			switch (action) {
 				case "list": {
 					const allTodos = await listTodos(todosDir);
-					const todos = allTodos.filter((t) => t.type !== "Memory");
+					const todos = allTodos.filter((t) => t.type !== "memory");
 					const { assignedTodos, openTodos } = splitTodosByAssignment(todos);
 					const listedTodos = [...assignedTodos, ...openTodos];
 					const currentSessionId = ctx.sessionManager.getSessionId();
@@ -1760,7 +1760,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 
 				case "list-all": {
 					const allTodos = await listTodos(todosDir);
-					const todos = allTodos.filter((t) => t.type !== "Memory");
+					const todos = allTodos.filter((t) => t.type !== "memory");
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(todos) }],
@@ -1770,7 +1770,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 
 				case "list-memories": {
 					const allTodos = await listTodos(todosDir);
-					const memories = allTodos.filter((t) => t.type === "Memory");
+					const memories = allTodos.filter((t) => t.type === "memory");
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(memories) }],
@@ -1846,7 +1846,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						created_at: new Date().toISOString(),
 						priority: params.priority,
 						parent: parentId,
-						type: params.type === "memory" ? "Memory" : undefined,
+						type: params.type === "memory" ? "memory" as const : undefined,
 						body: params.body ?? "",
 					};
 
