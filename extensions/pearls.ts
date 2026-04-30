@@ -67,6 +67,8 @@ const DEFAULT_TODO_SETTINGS = {
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
+export type TodoType = "ToDo" | "Memory";
+
 export interface TodoFrontMatter {
 	id: string;
 	title: string;
@@ -76,6 +78,7 @@ export interface TodoFrontMatter {
 	assigned_to_session?: string;
 	priority?: number;
 	parent?: string;
+	type?: TodoType;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
@@ -102,6 +105,7 @@ const TodoParams = Type.Object({
 	action: StringEnum([
 		"list",
 		"list-all",
+		"list-memories",
 		"get",
 		"create",
 		"update",
@@ -132,11 +136,13 @@ const TodoParams = Type.Object({
 		}),
 	),
 	force: Type.Optional(Type.Boolean({ description: "Override another session's assignment" })),
+	type: Type.Optional(StringEnum(["todo", "memory"] as const, { description: "Type of entry: 'todo' (default) or 'memory'. Determines whether this is a task or a persistent memory note." })),
 });
 
 type TodoAction =
 	| "list"
 	| "list-all"
+	| "list-memories"
 	| "get"
 	| "create"
 	| "update"
@@ -159,7 +165,7 @@ type TodoMenuAction =
 	| "view";
 
 type TodoToolDetails =
-	| { action: "list" | "list-all"; todos: TodoFrontMatter[]; allTodos: TodoFrontMatter[]; currentSessionId?: string; error?: string }
+	| { action: "list" | "list-all" | "list-memories"; todos: TodoFrontMatter[]; allTodos: TodoFrontMatter[]; currentSessionId?: string; error?: string }
 	| {
 			action: "get" | "create" | "update" | "append" | "delete" | "claim" | "release";
 			todo: TodoRecord;
@@ -920,6 +926,7 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		assigned_to_session: undefined,
 		priority: undefined,
 		parent: undefined,
+		type: undefined,
 	};
 
 	const trimmed = text.trim();
@@ -948,6 +955,9 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		}
 		if (typeof parsed.parent === "string" && TODO_ID_PATTERN.test(parsed.parent)) {
 			data.parent = parsed.parent.toLowerCase();
+		}
+		if (typeof parsed.type === "string" && (parsed.type === "Memory" || parsed.type === "ToDo")) {
+			data.type = parsed.type;
 		}
 	} catch {
 		return data;
@@ -1025,6 +1035,7 @@ function parseTodoContent(content: string, idFallback: string): TodoRecord {
 		assigned_to_session: parsed.assigned_to_session,
 		priority: parsed.priority,
 		parent: parsed.parent,
+		type: parsed.type,
 		body: body ?? "",
 	};
 }
@@ -1040,6 +1051,7 @@ function serializeTodo(todo: TodoRecord): string {
 			assigned_to_session: todo.assigned_to_session || undefined,
 			priority: todo.priority,
 			parent: todo.parent || undefined,
+			...(todo.type && todo.type !== "ToDo" ? { type: todo.type } : {}),
 		},
 		null,
 		2,
@@ -1178,6 +1190,7 @@ export async function listTodos(todosDir: string): Promise<TodoFrontMatter[]> {
 				assigned_to_session: parsed.assigned_to_session,
 				priority: parsed.priority,
 				parent: parsed.parent,
+				type: parsed.type,
 			});
 		} catch {
 			// ignore unreadable todo
@@ -1213,6 +1226,7 @@ function listTodosSync(todosDir: string): TodoFrontMatter[] {
 				assigned_to_session: parsed.assigned_to_session,
 				priority: parsed.priority,
 				parent: parsed.parent,
+				type: parsed.type,
 			});
 		} catch {
 			// ignore
@@ -1733,7 +1747,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 
 			switch (action) {
 				case "list": {
-					const todos = await listTodos(todosDir);
+					const allTodos = await listTodos(todosDir);
+					const todos = allTodos.filter((t) => t.type !== "Memory");
 					const { assignedTodos, openTodos } = splitTodosByAssignment(todos);
 					const listedTodos = [...assignedTodos, ...openTodos];
 					const currentSessionId = ctx.sessionManager.getSessionId();
@@ -1744,11 +1759,22 @@ export default function todosExtension(pi: ExtensionAPI) {
 				}
 
 				case "list-all": {
-					const todos = await listTodos(todosDir);
+					const allTodos = await listTodos(todosDir);
+					const todos = allTodos.filter((t) => t.type !== "Memory");
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(todos) }],
 						details: { action: "list-all", todos, allTodos: todos, currentSessionId },
+					};
+				}
+
+				case "list-memories": {
+					const allTodos = await listTodos(todosDir);
+					const memories = allTodos.filter((t) => t.type === "Memory");
+					const currentSessionId = ctx.sessionManager.getSessionId();
+					return {
+						content: [{ type: "text", text: serializeTodoListForAgent(memories) }],
+						details: { action: "list-memories", todos: memories, allTodos: memories, currentSessionId },
 					};
 				}
 
@@ -1820,6 +1846,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						created_at: new Date().toISOString(),
 						priority: params.priority,
 						parent: parentId,
+						type: params.type === "memory" ? "Memory" : undefined,
 						body: params.body ?? "",
 					};
 
@@ -2080,7 +2107,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 				return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);
 			}
 
-			if (details.action === "list" || details.action === "list-all") {
+			if (details.action === "list" || details.action === "list-all" || details.action === "list-memories") {
 				let text = renderTodoList(theme, details.todos, expanded, details.currentSessionId, details.allTodos);
 				if (!expanded) {
 					const { closedTodos } = splitTodosByAssignment(details.todos);

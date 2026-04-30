@@ -14,6 +14,8 @@
  */
 import * as todo from "../extensions/pearls.js";
 
+export type TodoType = "ToDo" | "Memory";
+
 export interface TodoFrontMatter {
 	id: string;
 	title: string;
@@ -23,6 +25,7 @@ export interface TodoFrontMatter {
 	assigned_to_session?: string;
 	priority?: number;
 	parent?: string;
+	type?: TodoType;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
