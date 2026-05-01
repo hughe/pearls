@@ -5,7 +5,7 @@
     "memory",
     "skill"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-04-30T14:32:37.385Z",
   "priority": 2,
   "parent": "b286d44d"
