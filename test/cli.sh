@@ -533,6 +533,123 @@ assert_contains "$out" '"memories": 1' "import-beads --json reports memories"
 out="$(pearls help)"
 assert_contains "$out" "import-beads" "help lists import-beads"
 
+section "CLI argument parsing"
+# --version
+out="$(pearls --version)"
+[[ -n "$out" ]] && pass "--version prints something" || fail "--version prints something"
+
+# -h is --help
+out="$(pearls -h)"
+assert_contains "$out" "pearls — agent-friendly todos" "-h prints help"
+
+# -q suppresses output on delete
+RT_ID="$(pearls create 'Quiet test' --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+out="$(pearls delete "TODO-$RT_ID" -q)"
+assert_eq "$out" "" "-q suppresses delete output"
+
+# Command aliases: new/add for create, edit for update, rm for delete, show for get
+RT_ID="$(pearls new 'Alias new' --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+[[ ${#RT_ID} -eq 8 ]] && pass "'new' alias creates todo" || fail "'new' alias creates todo"
+
+out="$(pearls add 'Alias add' --json)"
+assert_contains "$out" '"title": "Alias add"' "'add' alias creates todo"
+ADD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+out="$(pearls edit "TODO-$RT_ID" --title 'Updated via edit' --json)"
+assert_contains "$out" '"title": "Updated via edit"' "'edit' alias updates todo"
+
+out="$(pearls show "TODO-$RT_ID")"
+assert_contains "$out" "Updated via edit" "'show' alias gets todo"
+
+pearls rm "TODO-$ADD_ID" >/dev/null
+[[ ! -f "$WORK/todos/$ADD_ID.md" ]] && pass "'rm' alias deletes todo" || fail "'rm' alias deletes todo"
+
+# --tag=key inline syntax
+RT_ID="$(pearls create 'Tag eq test' --tag=eqtag --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+out="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$out" '"eqtag"' "--tag=value syntax accepted"
+pearls delete "TODO-$RT_ID" >/dev/null
+
+# --title flag (instead of positional)
+RT_ID="$(pearls create --title 'Title from flag' --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+out="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$out" '"title": "Title from flag"' "--title flag works for create"
+pearls delete "TODO-$RT_ID" >/dev/null
+
+# --type memory
+RT_ID="$(pearls create 'A memory' --type memory --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+out="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$out" '"type": "memory"' "--type memory sets type field"
+pearls delete "TODO-$RT_ID" >/dev/null
+
+# Unknown short flag errors
+assert_status 2 "unknown short flag errors" pearls -Z list
+
+# Unknown command errors
+assert_status 2 "unknown command errors" pearls nope
+
+# -- separator stops flag parsing
+RT_ID="$(pearls create --json -- --leading-dash-title | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+[[ -n "$RT_ID" ]] && pass "create accepts -- separator" || fail "create accepts -- separator"
+pearls delete "TODO-$RT_ID" >/dev/null
+
+section "create → list → get JSON round-trip"
+# Create a fully-populated todo, then verify every field survives the
+# round trip through list --json and get --json unchanged.
+RT_ID="$(pearls create 'Round-trip task' --tag rt1 --tag rt2 --priority 1 --body 'RT body text' --json \
+	| sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+
+# Verify the create --json payload has all fields.
+CREATE_JSON="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$CREATE_JSON" '"id": "TODO-' "round-trip: id present"
+assert_contains "$CREATE_JSON" '"title": "Round-trip task"' "round-trip: title matches"
+assert_contains "$CREATE_JSON" '"rt1"' "round-trip: tag rt1 present"
+assert_contains "$CREATE_JSON" '"rt2"' "round-trip: tag rt2 present"
+assert_contains "$CREATE_JSON" '"priority": 1' "round-trip: priority matches"
+assert_contains "$CREATE_JSON" '"status": "open"' "round-trip: status matches"
+assert_contains "$CREATE_JSON" 'RT body text' "round-trip: body present"
+
+# list --json should contain the same fields (minus body).
+LIST_JSON="$(pearls list --json)"
+assert_contains "$LIST_JSON" '"title": "Round-trip task"' "round-trip: list --json has title"
+assert_contains "$LIST_JSON" '"priority": 1' "round-trip: list --json has priority"
+assert_not_contains "$LIST_JSON" 'RT body text' "round-trip: list --json omits body"
+
+# Update title + body, then get --json to verify persistence.
+out="$(pearls update "TODO-$RT_ID" --title 'Updated RT' --body 'New body' --json)"
+assert_contains "$out" '"title": "Updated RT"' "round-trip: update changes title in JSON"
+GET_JSON="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$GET_JSON" '"title": "Updated RT"' "round-trip: updated title persists in get"
+assert_contains "$GET_JSON" 'New body' "round-trip: updated body persists in get"
+
+# Append adds to body without replacing.
+out="$(pearls append "TODO-$RT_ID" --body 'Appended line')"
+GET_JSON="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$GET_JSON" 'New body' "round-trip: original body preserved after append"
+assert_contains "$GET_JSON" 'Appended line' "round-trip: appended content present"
+
+# Close → reopen round-trip.
+out="$(pearls close "TODO-$RT_ID" --json)"
+assert_contains "$out" '"status": "closed"' "round-trip: close reflected in JSON"
+GET_JSON="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$GET_JSON" '"status": "closed"' "round-trip: closed status persists in get"
+assert_contains "$GET_JSON" '"closed_at"' "round-trip: closed_at set on close"
+
+out="$(pearls reopen "TODO-$RT_ID" --json)"
+assert_contains "$out" '"status": "open"' "round-trip: reopen reflected in JSON"
+
+# Claim → release round-trip.
+out="$(pearls claim "TODO-$RT_ID" --json)"
+assert_contains "$out" '"assigned_to_session"' "round-trip: claim sets assigned_to_session"
+GET_JSON="$(pearls get "TODO-$RT_ID" --json)"
+assert_contains "$GET_JSON" '"assigned_to_session"' "round-trip: assignment persists in get"
+
+out="$(pearls release "TODO-$RT_ID" --json)"
+assert_not_contains "$out" '"assigned_to_session"' "round-trip: release clears assigned_to_session"
+
+# Clean up.
+pearls delete "TODO-$RT_ID" >/dev/null
+
 section "--no-gc"
 # Can't easily test GC without time travel; just assert the flag is
 # accepted and the command still succeeds.
