@@ -25,7 +25,7 @@
  * Defaults:
  * {
  *   "gc": true,   // delete closed todos older than gcDays on startup
- *   "gcDays": 7   // age threshold for GC (days since created_at)
+ *   "gcDays": 90   // age threshold for GC (days since last modified)
  * }
  *
  * Use `/pearls` to bring up the visual todo manager or just let the LLM use them
@@ -63,7 +63,7 @@ const TODO_ID_PREFIX = "TODO-";
 const TODO_ID_PATTERN = /^[a-f0-9]{8}$/i;
 const DEFAULT_TODO_SETTINGS = {
 	gc: true,
-	gcDays: 7,
+	gcDays: 90,
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
@@ -2538,6 +2538,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 					const result = await applyTodoAction(record, action);
 					if (result === "stay") {
 						setActiveComponent(selector);
+						selector?.invalidate();
+						tui.requestRender();
 					}
 				};
 
