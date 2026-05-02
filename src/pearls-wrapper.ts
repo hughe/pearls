@@ -26,6 +26,7 @@ export interface TodoFrontMatter {
 	priority?: number;
 	parent?: string;
 	type?: TodoType;
+	closed_at?: string;
 }
 
 export interface TodoRecord extends TodoFrontMatter {

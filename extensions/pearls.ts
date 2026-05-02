@@ -25,7 +25,7 @@
  * Defaults:
  * {
  *   "gc": true,   // delete closed todos older than gcDays on startup
- *   "gcDays": 90   // age threshold for GC (days since last modified)
+ *   "gcDays": 30   // age threshold for GC (days since closed_at)
  * }
  *
  * Use `/pearls` to bring up the visual todo manager or just let the LLM use them
@@ -63,7 +63,7 @@ const TODO_ID_PREFIX = "TODO-";
 const TODO_ID_PATTERN = /^[a-f0-9]{8}$/i;
 const DEFAULT_TODO_SETTINGS = {
 	gc: true,
-	gcDays: 90,
+	gcDays: 30,
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
@@ -79,6 +79,7 @@ export interface TodoFrontMatter {
 	priority?: number;
 	parent?: string;
 	type?: TodoType;
+	closed_at?: string;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
@@ -946,6 +947,7 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		priority: undefined,
 		parent: undefined,
 		type: undefined,
+		closed_at: undefined,
 	};
 
 	const trimmed = text.trim();
@@ -977,6 +979,9 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		}
 		if (typeof parsed.type === "string" && (parsed.type === "memory" || parsed.type === "todo")) {
 			data.type = parsed.type;
+		}
+		if (typeof parsed.closed_at === "string" && parsed.closed_at.trim()) {
+			data.closed_at = parsed.closed_at;
 		}
 	} catch {
 		return data;
@@ -1055,6 +1060,7 @@ function parseTodoContent(content: string, idFallback: string): TodoRecord {
 		priority: parsed.priority,
 		parent: parsed.parent,
 		type: parsed.type,
+		closed_at: parsed.closed_at,
 		body: body ?? "",
 	};
 }
@@ -1071,6 +1077,7 @@ function serializeTodo(todo: TodoRecord): string {
 			priority: todo.priority,
 			parent: todo.parent || undefined,
 			...(todo.type && todo.type !== "todo" ? { type: todo.type } : {}),
+			...(todo.closed_at ? { closed_at: todo.closed_at } : {}),
 		},
 		null,
 		2,
@@ -1210,6 +1217,7 @@ export async function listTodos(todosDir: string): Promise<TodoFrontMatter[]> {
 				priority: parsed.priority,
 				parent: parsed.parent,
 				type: parsed.type,
+				closed_at: parsed.closed_at,
 			});
 		} catch {
 			// ignore unreadable todo
@@ -1246,6 +1254,7 @@ function listTodosSync(todosDir: string): TodoFrontMatter[] {
 				priority: parsed.priority,
 				parent: parsed.parent,
 				type: parsed.type,
+				closed_at: parsed.closed_at,
 			});
 		} catch {
 			// ignore
@@ -1617,6 +1626,11 @@ export async function updateTodoStatus(
 		const existing = await ensureTodoExists(filePath, normalizedId);
 		if (!existing) return { error: `Todo ${displayTodoId(id)} not found` } as const;
 		existing.status = status;
+		if (isTodoClosed(status)) {
+			existing.closed_at = new Date().toISOString();
+		} else {
+			existing.closed_at = undefined;
+		}
 		clearAssignmentIfClosed(existing);
 		await writeTodoFile(filePath, existing);
 		return existing;
