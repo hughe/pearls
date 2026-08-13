@@ -5,10 +5,11 @@
     "naming",
     "cli"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:48:36.279Z",
   "priority": 1,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:43.490Z",
   "slug": "slug-derivation-slug-flag-sanitiser-and"
 }
 
@@ -61,3 +62,12 @@ carry it.
 `slugifyTodo` is exported and covered by the shell tests added in the
 testing child; `--slug` parses on create and update; the field round-trips
 through write/read without disturbing files that do not use it.
+
+## Done
+
+`slugifyTodo` in `extensions/pearls.ts`: lowercase, non-alphanumerics to
+`-`, collapse, trim, then cut to 40 and re-trim. Empty result becomes
+`untitled`. `--slug` is accepted by `create` and `update` and goes through
+the same sanitiser, so `--slug ../../etc/passwd` lands as `etc-passwd`
+rather than escaping the directory. The `slug` field is parsed and written
+only when set, so files that predate it are untouched.

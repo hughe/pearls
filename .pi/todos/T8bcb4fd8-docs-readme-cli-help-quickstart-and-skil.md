@@ -4,10 +4,11 @@
   "tags": [
     "docs"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:49:57.915Z",
   "priority": 2,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:35:01.745Z",
   "slug": "docs-readme-cli-help-quickstart-and-skil"
 }
 
@@ -45,3 +46,9 @@ nobody panics at a mixed directory.
 - That `.pi/todos/archive/` is committed to git, and that `pearls delete`
   is still a true delete while GC archives.
 - `list-all --archived`.
+
+## Done
+
+README (storage layout, settings table, command table, ids section), CLI
+`HELP` and `QUICKSTART`, and `skills/pearls/SKILL.md` (bumped to 1.2) all
+describe the new scheme, the rename policy and the archive.

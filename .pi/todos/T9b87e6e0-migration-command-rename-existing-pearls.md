@@ -6,10 +6,11 @@
     "cli",
     "migration"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:49:23.680Z",
   "priority": 1,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:51.422Z",
   "slug": "migration-command-rename-existing-pearls"
 }
 
@@ -78,3 +79,15 @@ Running the command against a copy of this repo's `.pi/todos` renames all
   `create` would have produced for the same title.
 - While rewriting the front matter, consider back-filling `closed_at` from
   `created_at` on closed pearls that lack it — see TODO-90066643.
+
+## Done
+
+`src/migrate-filenames.ts`, exposed as `pearls migrate-filenames`
+(`--dry-run`, `--force`). Uses `git mv` for tracked files and falls back to
+`fs.rename`; locks each pearl; skips and reports unreadable files instead
+of aborting. Ran on this repo: 37 files renamed, all detected as renames by
+git, second run a no-op.
+
+Not done: back-filling `closed_at` from `created_at`. It would write a
+timestamp we do not actually know, and the fallback in TODO-90066643
+handles those pearls correctly anyway.

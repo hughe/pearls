@@ -5,10 +5,11 @@
     "naming",
     "refactor"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:48:39.004Z",
   "priority": 1,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:46.182Z",
   "slug": "decouple-id-from-filename-path-resolver"
 }
 
@@ -64,3 +65,17 @@ Then update every consumer:
 Every read, write, lock and delete goes through the resolver, and a
 directory containing a mix of `<hex>.md` and `T<hex>-<slug>.md` behaves
 identically for both.
+
+## Done
+
+`parseTodoFileName` recognises both `T<hex>-<slug>.md` and legacy
+`<hex>.md`; `getTodoPath` became the resolver (scan the todos dir, then the
+archive, then fall back to the legacy composed path so existing
+`existsSync` "not found" checks still work); `newTodoPath`/`todoFileName`
+handle creation. Keeping the resolver behind the existing `getTodoPath`
+name meant the ~20 read call sites in the Pi tool and TUI needed no
+changes at all — only the five creation sites did.
+
+Deviation from the plan: no readdir cache. The directory is small, the CLI
+is one-shot, and an invalidation bug would be worse than the scan. Worth
+revisiting only if the Pi TUI shows up slow on a large backlog.

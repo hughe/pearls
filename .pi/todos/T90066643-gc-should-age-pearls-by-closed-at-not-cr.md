@@ -6,10 +6,11 @@
     "gc",
     "bug"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:58:40.498Z",
   "priority": 1,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:56.570Z",
   "slug": "gc-should-age-pearls-by-closed-at-not-cr"
 }
 
@@ -51,3 +52,10 @@ archive on the next GC pass, which is survivable but noisy.
 A pearl created long ago but closed today survives GC, a pearl closed more
 than `gcDays` ago is archived, and a closed pearl with no `closed_at` is
 aged by `created_at` as before.
+
+## Done
+
+GC now ages from `closed_at`, falling back to `created_at` when it is
+absent. Covered by tests: a pearl created in 2020 but closed today
+survives; one closed in 2020 is archived; one closed with no `closed_at`
+falls back and is archived.

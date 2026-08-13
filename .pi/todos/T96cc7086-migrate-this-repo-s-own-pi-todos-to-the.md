@@ -4,10 +4,11 @@
   "tags": [
     "migration"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:50:00.427Z",
   "priority": 3,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:35:04.308Z",
   "slug": "migrate-this-repo-s-own-pi-todos-to-the"
 }
 
@@ -44,3 +45,10 @@ field existed have no `closed_at` and fall back to `created_at`, so this
 repo's 25 older pearls will still be archived on the first GC pass. Do it
 in a deliberate, labelled commit rather than letting it happen as a side
 effect of someone running `pearls list`.
+
+## Done
+
+37 files renamed via `pearls migrate-filenames` (git recorded them as
+renames), then GC was re-enabled in a labelled commit, which archived 26
+finished pearls into `.pi/todos/archive/`. The backlog directory now holds
+only this epic's ten open pearls plus one open memory.

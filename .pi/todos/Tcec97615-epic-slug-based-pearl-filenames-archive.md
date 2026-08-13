@@ -7,9 +7,10 @@
     "archive",
     "cli"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:48:05.939Z",
   "priority": 1,
+  "closed_at": "2026-08-13T22:35:06.850Z",
   "slug": "epic-slug-based-pearl-filenames-archive"
 }
 
