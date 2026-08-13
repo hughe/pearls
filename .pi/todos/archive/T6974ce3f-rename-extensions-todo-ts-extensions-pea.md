@@ -8,7 +8,8 @@
   ],
   "status": "closed",
   "created_at": "2026-04-28T15:58:02.706Z",
-  "priority": 1
+  "priority": 1,
+  "slug": "rename-extensions-todo-ts-extensions-pea"
 }
 
 ## Goal

@@ -4,7 +4,8 @@
   "tags": [],
   "status": "open",
   "created_at": "2026-04-30T21:43:25.598Z",
-  "type": "memory"
+  "type": "memory",
+  "slug": "important-project-context"
 }
 
 # Important project context

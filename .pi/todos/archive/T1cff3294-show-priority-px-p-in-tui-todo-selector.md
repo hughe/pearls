@@ -7,7 +7,8 @@
   ],
   "status": "closed",
   "created_at": "2026-04-27T15:38:20.431Z",
-  "priority": 2
+  "priority": 2,
+  "slug": "show-priority-px-p-in-tui-todo-selector"
 }
 
 ## What

@@ -6,7 +6,8 @@
     "tests"
   ],
   "status": "closed",
-  "created_at": "2026-04-26T23:54:08.585Z"
+  "created_at": "2026-04-26T23:54:08.585Z",
+  "slug": "add-a-few-tests-for-cli-argument-parsing"
 }
 
 ## Done

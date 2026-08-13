@@ -5,7 +5,8 @@
   "status": "closed",
   "created_at": "2026-04-27T22:24:06.472Z",
   "parent": "fb1a1bbd",
-  "closed_at": "2026-05-02T19:27:59.833Z"
+  "closed_at": "2026-05-02T19:27:59.833Z",
+  "slug": "t3"
 }
 
 # T3

@@ -7,7 +7,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.369Z",
   "priority": 1,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "filter-memories-out-of-pearls-list"
 }
 
 # Filter memories out of pearls list

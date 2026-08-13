@@ -7,7 +7,8 @@
   "status": "closed",
   "created_at": "2026-04-30T15:14:58.532Z",
   "priority": 1,
-  "closed_at": "2026-05-02T17:41:34.586Z"
+  "closed_at": "2026-05-02T17:41:34.586Z",
+  "slug": "investigate-gc-timing-for-closed-pearls"
 }
 
 # Investigate GC timing for closed pearls

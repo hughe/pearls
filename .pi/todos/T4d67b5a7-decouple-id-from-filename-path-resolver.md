@@ -8,7 +8,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:48:39.004Z",
   "priority": 1,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "decouple-id-from-filename-path-resolver"
 }
 
 # Decouple id from filename: path resolver over the todos directory

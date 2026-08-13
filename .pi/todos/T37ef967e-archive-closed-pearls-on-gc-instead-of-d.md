@@ -8,7 +8,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:49:26.455Z",
   "priority": 1,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "archive-closed-pearls-on-gc-instead-of-d"
 }
 
 # Archive closed pearls on GC instead of deleting them

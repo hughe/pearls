@@ -8,7 +8,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.385Z",
   "priority": 2,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "skill-support-for-please-remember-phrase"
 }
 
 # Skill support for 'Please remember …' phrases

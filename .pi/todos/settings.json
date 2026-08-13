@@ -1,5 +1,5 @@
 {
-  "_comment": "GC is off until TODO-37ef967e (archive instead of delete) and TODO-90066643 (age by closed_at) land. Until then a GC pass would unlink every closed pearl in this repo, because the age check compares created_at.",
-  "gc": false,
-  "gcDays": 30
+  "gc": true,
+  "gcDays": 30,
+  "archive": true
 }

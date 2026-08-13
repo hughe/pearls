@@ -9,7 +9,8 @@
   ],
   "status": "open",
   "created_at": "2026-08-13T21:48:05.939Z",
-  "priority": 1
+  "priority": 1,
+  "slug": "epic-slug-based-pearl-filenames-archive"
 }
 
 # Epic: slug-based pearl filenames + archive instead of delete

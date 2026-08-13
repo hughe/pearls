@@ -8,7 +8,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:48:36.279Z",
   "priority": 1,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "slug-derivation-slug-flag-sanitiser-and"
 }
 
 # Slug derivation: --slug flag, sanitiser, and slug front-matter field
