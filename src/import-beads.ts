@@ -16,7 +16,8 @@ import path from "node:path";
 
 import {
 	generateTodoId,
-	getTodoPath,
+	newTodoPath,
+	slugifyTodo,
 	withTodoLock,
 	writeTodoFile,
 	type CliExtensionContextLike,
@@ -216,17 +217,20 @@ export async function importBeads(
 
 		const issue = parsed;
 		const todoId = await generateTodoId(opts.todosDir);
-		const filePath = getTodoPath(opts.todosDir, todoId);
+		const issueTitle = (issue.title ?? "").trim();
+		const slug = slugifyTodo(issueTitle);
+		const filePath = newTodoPath(opts.todosDir, todoId, slug);
 
 		const todo: TodoRecord = {
 			id: todoId,
-			title: (issue.title ?? "").trim(),
+			title: issueTitle,
 			tags: buildTags(issue),
 			status: mapStatus(issue.status),
 			created_at: issue.created_at && issue.created_at.trim()
 				? issue.created_at
 				: new Date().toISOString(),
 			body: buildBody(issue),
+			slug,
 		};
 
 		if (opts.dryRun) {

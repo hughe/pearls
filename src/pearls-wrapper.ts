@@ -27,6 +27,7 @@ export interface TodoFrontMatter {
 	parent?: string;
 	type?: TodoType;
 	closed_at?: string;
+	slug?: string;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
@@ -57,15 +58,40 @@ export const getTodosDir: (cwd: string) => string = todo.getTodosDir;
 export const hasPiTodoPathDeprecation: () => boolean = todo.hasPiTodoPathDeprecation;
 export const getTodoPath: (todosDir: string, id: string) => string =
 	todo.getTodoPath;
+export const newTodoPath: (
+	todosDir: string,
+	id: string,
+	slug: string,
+) => string = todo.newTodoPath;
+export const slugifyTodo: (input: string) => string = todo.slugifyTodo;
+export const todoFileName: (id: string, slug: string) => string =
+	todo.todoFileName;
+export const parseTodoFileName: (
+	entry: string,
+) => { id: string; slug?: string } | null = todo.parseTodoFileName;
+export const getTodoArchiveDir: (todosDir: string) => string =
+	todo.getTodoArchiveDir;
+export const isArchivedTodoPath: (todosDir: string, filePath: string) => boolean =
+	todo.isArchivedTodoPath;
+export const renameTodoFile: (
+	todosDir: string,
+	t: TodoRecord,
+	currentPath: string,
+) => Promise<string> = todo.renameTodoFile;
 
 export const ensureTodosDir: (todosDir: string) => Promise<void> =
 	todo.ensureTodosDir;
+export interface TodoSettings {
+	gc: boolean;
+	gcDays: number;
+	archive: boolean;
+}
 export const readTodoSettings: (
 	todosDir: string,
-) => Promise<{ gc: boolean; gcDays: number }> = todo.readTodoSettings;
+) => Promise<TodoSettings> = todo.readTodoSettings;
 export const garbageCollectTodos: (
 	todosDir: string,
-	settings: { gc: boolean; gcDays: number },
+	settings: TodoSettings,
 ) => Promise<void> = todo.garbageCollectTodos;
 
 export const writeTodoFile: (

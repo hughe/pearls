@@ -12,7 +12,7 @@ description: >
 compatibility: Requires the pearls CLI on $PATH. Works with any agent that can run shell commands.
 metadata:
   author: pearls
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Pearls — Todo & Memory Management Skill
@@ -51,6 +51,7 @@ When the user asks you to remember something:
 | Claim a task | `pearls claim <id> --json` |
 | Release a task | `pearls release <id> --json` |
 | Delete a task | `pearls delete <id> --json` |
+| Rename a task's file | `pearls reslug <id>` |
 | Refine a task | `pearls refine <id> --json` |
 | Create a memory | `pearls create "Title" --type memory --json --body "Full text"` |
 | List memories | `pearls memories --json` |
@@ -60,6 +61,13 @@ When the user asks you to remember something:
 
 Todos and memories are identified as `TODO-<hex>` (e.g. `TODO-b766eeb7`). Both the
 full form and the bare hex are accepted by every command.
+
+On disk each one is `T<hex>-<slug>.md` under `.pi/todos`. The hex is the id;
+the slug just makes the directory readable and is derived from the title
+(override it with `--slug` when creating). Changing a title does not rename
+the file — run `pearls reslug <id>` if the user wants the filename to catch
+up. Closed todos that age out are moved to `.pi/todos/archive/` rather than
+deleted; `pearls list-all --archived` includes them.
 
 ## Workflow
 
@@ -89,6 +97,7 @@ pearls create "Implement login page" \
   --tag feature \
   --tag auth \
   --parent TODO-a1b2c3d4 \
+  --slug login-page \
   --body "Build a login page with email/password. Must validate inputs." \
   --json
 ```

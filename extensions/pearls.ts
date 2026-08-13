@@ -61,9 +61,21 @@ const PEARLS_DIR_ENV = "PEARLS_DIR";
 const TODO_SETTINGS_NAME = "settings.json";
 const TODO_ID_PREFIX = "TODO-";
 const TODO_ID_PATTERN = /^[a-f0-9]{8}$/i;
+// Files are named T<hex>-<slug>.md. The hex is the id and is authoritative;
+// the slug is decoration for humans browsing the directory and may drift
+// from the title. Files written before this scheme are named <hex>.md and
+// are still read (and are converted by `pearls migrate-filenames`).
+const TODO_FILE_PREFIX = "T";
+const TODO_FILE_PATTERN = /^T([a-f0-9]{8})-(.+)\.md$/i;
+const LEGACY_TODO_FILE_PATTERN = /^([a-f0-9]{8})\.md$/i;
+const SLUG_MAX_LENGTH = 40;
+const SLUG_FALLBACK = "untitled";
+// Closed todos are moved here by GC instead of being deleted.
+const TODO_ARCHIVE_DIR_NAME = "archive";
 const DEFAULT_TODO_SETTINGS = {
 	gc: true,
 	gcDays: 30,
+	archive: true,
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
@@ -80,6 +92,7 @@ export interface TodoFrontMatter {
 	parent?: string;
 	type?: TodoType;
 	closed_at?: string;
+	slug?: string;
 }
 
 export interface TodoRecord extends TodoFrontMatter {
@@ -96,6 +109,7 @@ interface LockInfo {
 interface TodoSettings {
 	gc: boolean;
 	gcDays: number;
+	archive: boolean;
 }
 
 type KeybindingMatcher = {
@@ -874,9 +888,11 @@ function getTodoSettingsPath(todosDir: string): string {
 function normalizeTodoSettings(raw: Partial<TodoSettings>): TodoSettings {
 	const gc = raw.gc ?? DEFAULT_TODO_SETTINGS.gc;
 	const gcDays = Number.isFinite(raw.gcDays) ? raw.gcDays : DEFAULT_TODO_SETTINGS.gcDays;
+	const archive = raw.archive ?? DEFAULT_TODO_SETTINGS.archive;
 	return {
 		gc: Boolean(gc),
 		gcDays: Math.max(0, Math.floor(gcDays)),
+		archive: Boolean(archive),
 	};
 }
 
@@ -907,18 +923,26 @@ export async function garbageCollectTodos(todosDir: string, settings: TodoSettin
 	const cutoff = Date.now() - settings.gcDays * 24 * 60 * 60 * 1000;
 	await Promise.all(
 		entries
-			.filter((entry) => entry.endsWith(".md"))
-			.map(async (entry) => {
-				const id = entry.slice(0, -3);
+			.map((entry) => ({ entry, parsed: parseTodoFileName(entry) }))
+			.filter((candidate) => candidate.parsed !== null)
+			.map(async ({ entry, parsed: name }) => {
+				const id = name!.id;
 				const filePath = path.join(todosDir, entry);
 				try {
 					const content = await fs.readFile(filePath, "utf8");
 					const { frontMatter } = splitFrontMatter(content);
 					const parsed = parseFrontMatter(frontMatter, id);
 					if (!isTodoClosed(parsed.status)) return;
-					const createdAt = Date.parse(parsed.created_at);
-					if (!Number.isFinite(createdAt)) return;
-					if (createdAt < cutoff) {
+					// Age from closed_at — a todo created a year ago but closed
+					// yesterday has only just finished. Todos closed before
+					// closed_at existed have none, so fall back to created_at
+					// rather than keeping them forever.
+					const retiredAt = Date.parse(parsed.closed_at || parsed.created_at);
+					if (!Number.isFinite(retiredAt)) return;
+					if (retiredAt >= cutoff) return;
+					if (settings.archive) {
+						await archiveTodoFile(todosDir, filePath, entry, id, parsed.slug || parsed.title);
+					} else {
 						await fs.unlink(filePath);
 					}
 				} catch {
@@ -928,11 +952,150 @@ export async function garbageCollectTodos(todosDir: string, settings: TodoSettin
 	);
 }
 
+/**
+ * Move a retired todo into <todosDir>/archive/.
+ *
+ * A file already in the current scheme keeps its name — archiving is not
+ * the moment to renumber someone's filenames. A legacy <hex>.md is
+ * converted on the way in, so the archive never needs migrating itself.
+ *
+ * A todo that was archived, reopened and closed again would collide, so an
+ * existing target gets a numeric suffix rather than being overwritten. The
+ * suffix is appended to the filename directly (not through slugifyTodo,
+ * whose length cap could swallow it), and the result still parses as a todo
+ * filename.
+ */
+async function archiveTodoFile(
+	todosDir: string,
+	filePath: string,
+	entry: string,
+	id: string,
+	slugSource: string,
+): Promise<void> {
+	const archiveDir = getTodoArchiveDir(todosDir);
+	await fs.mkdir(archiveDir, { recursive: true });
+
+	const parsedName = parseTodoFileName(entry);
+	const name = parsedName?.slug ? entry : todoFileName(id, slugSource);
+	let target = path.join(archiveDir, name);
+	for (let attempt = 1; existsSync(target) && attempt < 100; attempt += 1) {
+		target = path.join(archiveDir, name.replace(/\.md$/, `-${attempt}.md`));
+	}
+
+	try {
+		await fs.rename(filePath, target);
+	} catch (error) {
+		// The todos dir can sit on a different mount to its archive only in
+		// exotic setups, but rename() across devices fails outright, so fall
+		// back to copy + unlink.
+		if ((error as NodeJS.ErrnoException)?.code !== "EXDEV") throw error;
+		await fs.copyFile(filePath, target);
+		await fs.unlink(filePath);
+	}
+}
+
+/**
+ * Turn a title (or an explicit --slug) into the filename fragment.
+ *
+ * Lowercase, every character outside [a-z0-9] becomes '-', runs collapse,
+ * ends are trimmed, and only then is the result cut to SLUG_MAX_LENGTH —
+ * sanitising first means 40 characters are 40 useful ones. Input that
+ * sanitises away entirely (a title of "???") falls back to "untitled" so
+ * every filename has the same shape.
+ */
+export function slugifyTodo(input: string): string {
+	const sanitized = (input ?? "")
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	const truncated = sanitized.slice(0, SLUG_MAX_LENGTH).replace(/-+$/, "");
+	return truncated || SLUG_FALLBACK;
+}
+
+/** Compose the filename for a new (or renamed) todo. */
+export function todoFileName(id: string, slug: string): string {
+	return `${TODO_FILE_PREFIX}${id}-${slugifyTodo(slug)}.md`;
+}
+
+/**
+ * Recover the id (and slug) from a directory entry, or null if the entry
+ * isn't a todo file. Both the current T<hex>-<slug>.md scheme and the
+ * legacy <hex>.md one are recognised, so a half-migrated directory works.
+ */
+export function parseTodoFileName(entry: string): { id: string; slug?: string } | null {
+	const match = TODO_FILE_PATTERN.exec(entry);
+	if (match) return { id: match[1]!.toLowerCase(), slug: match[2] };
+	const legacy = LEGACY_TODO_FILE_PATTERN.exec(entry);
+	if (legacy) return { id: legacy[1]!.toLowerCase() };
+	return null;
+}
+
+export function getTodoArchiveDir(todosDir: string): string {
+	return path.join(todosDir, TODO_ARCHIVE_DIR_NAME);
+}
+
+/** Path for a todo that does not exist yet. */
+export function newTodoPath(todosDir: string, id: string, slug: string): string {
+	return path.join(todosDir, todoFileName(id, slug));
+}
+
+function findTodoEntry(dir: string, id: string): string | null {
+	let entries: string[];
+	try {
+		entries = readdirSync(dir);
+	} catch {
+		return null;
+	}
+	for (const entry of entries) {
+		const parsed = parseTodoFileName(entry);
+		if (parsed && parsed.id === id.toLowerCase()) return path.join(dir, entry);
+	}
+	return null;
+}
+
+/**
+ * Resolve an id to the file that holds it.
+ *
+ * The filename carries a slug now, so this is a directory scan rather than
+ * string concatenation. The archive is searched after the todos directory,
+ * so `get`/`path` still work for pearls that GC has retired. When nothing
+ * matches, the legacy composed path is returned so existing callers can
+ * keep using their `existsSync(...)` "not found" check unchanged.
+ */
 export function getTodoPath(todosDir: string, id: string): string {
-	return path.join(todosDir, `${id}.md`);
+	return (
+		findTodoEntry(todosDir, id) ??
+		findTodoEntry(getTodoArchiveDir(todosDir), id) ??
+		path.join(todosDir, `${id}.md`)
+	);
+}
+
+/** True when the resolved path lives in the archive rather than the backlog. */
+export function isArchivedTodoPath(todosDir: string, filePath: string): boolean {
+	const archiveDir = path.resolve(getTodoArchiveDir(todosDir));
+	return path.resolve(path.dirname(filePath)) === archiveDir;
+}
+
+/**
+ * Move a todo to the filename its slug implies. Returns the path the todo
+ * now lives at; a no-op (and the same path) when the name already matches.
+ * Callers are expected to hold the todo's lock.
+ */
+export async function renameTodoFile(
+	todosDir: string,
+	todo: TodoRecord,
+	currentPath: string,
+): Promise<string> {
+	const dir = path.dirname(currentPath);
+	const target = path.join(dir, todoFileName(todo.id, todo.slug || todo.title));
+	if (path.resolve(target) === path.resolve(currentPath)) return currentPath;
+	await fs.rename(currentPath, target);
+	return target;
 }
 
 function getLockPath(todosDir: string, id: string): string {
+	// Keyed on the bare id, not the filename: locking must not depend on the
+	// slug being current, and .gitignore already ignores .pi/todos/*.lock.
 	return path.join(todosDir, `${id}.lock`);
 }
 
@@ -982,6 +1145,9 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		}
 		if (typeof parsed.closed_at === "string" && parsed.closed_at.trim()) {
 			data.closed_at = parsed.closed_at;
+		}
+		if (typeof parsed.slug === "string" && parsed.slug.trim()) {
+			data.slug = parsed.slug.trim();
 		}
 	} catch {
 		return data;
@@ -1061,6 +1227,7 @@ function parseTodoContent(content: string, idFallback: string): TodoRecord {
 		parent: parsed.parent,
 		type: parsed.type,
 		closed_at: parsed.closed_at,
+		slug: parsed.slug,
 		body: body ?? "",
 	};
 }
@@ -1078,6 +1245,7 @@ function serializeTodo(todo: TodoRecord): string {
 			parent: todo.parent || undefined,
 			...(todo.type && todo.type !== "todo" ? { type: todo.type } : {}),
 			...(todo.closed_at ? { closed_at: todo.closed_at } : {}),
+			...(todo.slug ? { slug: todo.slug } : {}),
 		},
 		null,
 		2,
@@ -1105,8 +1273,9 @@ export async function writeTodoFile(filePath: string, todo: TodoRecord) {
 export async function generateTodoId(todosDir: string): Promise<string> {
 	for (let attempt = 0; attempt < 10; attempt += 1) {
 		const id = crypto.randomBytes(4).toString("hex");
-		const todoPath = getTodoPath(todosDir, id);
-		if (!existsSync(todoPath)) return id;
+		// Uniqueness is "no file resolves to this id", not "no <id>.md
+		// exists" — a slugged or archived file claims its id too.
+		if (!existsSync(getTodoPath(todosDir, id))) return id;
 	}
 	throw new Error("Failed to generate unique todo id");
 }
@@ -1200,8 +1369,11 @@ export async function listTodos(todosDir: string): Promise<TodoFrontMatter[]> {
 
 	const todos: TodoFrontMatter[] = [];
 	for (const entry of entries) {
-		if (!entry.endsWith(".md")) continue;
-		const id = entry.slice(0, -3);
+		// The filename carries the id; entries that don't parse (README,
+		// memories.jsonl, the archive directory) are not todos.
+		const name = parseTodoFileName(entry);
+		if (!name) continue;
+		const id = name.id;
 		const filePath = path.join(todosDir, entry);
 		try {
 			const content = await fs.readFile(filePath, "utf8");
@@ -1218,6 +1390,7 @@ export async function listTodos(todosDir: string): Promise<TodoFrontMatter[]> {
 				parent: parsed.parent,
 				type: parsed.type,
 				closed_at: parsed.closed_at,
+				slug: parsed.slug ?? name.slug,
 			});
 		} catch {
 			// ignore unreadable todo
@@ -1237,8 +1410,11 @@ function listTodosSync(todosDir: string): TodoFrontMatter[] {
 
 	const todos: TodoFrontMatter[] = [];
 	for (const entry of entries) {
-		if (!entry.endsWith(".md")) continue;
-		const id = entry.slice(0, -3);
+		// The filename carries the id; entries that don't parse (README,
+		// memories.jsonl, the archive directory) are not todos.
+		const name = parseTodoFileName(entry);
+		if (!name) continue;
+		const id = name.id;
 		const filePath = path.join(todosDir, entry);
 		try {
 			const content = readFileSync(filePath, "utf8");
@@ -1255,6 +1431,7 @@ function listTodosSync(todosDir: string): TodoFrontMatter[] {
 				parent: parsed.parent,
 				type: parsed.type,
 				closed_at: parsed.closed_at,
+				slug: parsed.slug ?? name.slug,
 			});
 		} catch {
 			// ignore
@@ -1905,7 +2082,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 					}
 					await ensureTodosDir(todosDir);
 					const id = await generateTodoId(todosDir);
-					const filePath = getTodoPath(todosDir, id);
+					const slug = slugifyTodo(params.title);
+					const filePath = newTodoPath(todosDir, id, slug);
 					const todo: TodoRecord = {
 						id,
 						title: params.title,
@@ -1915,6 +2093,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						priority: params.priority,
 						parent: parentId,
 						type: params.type === "memory" ? "memory" as const : undefined,
+						slug,
 						body: params.body ?? "",
 					};
 
@@ -2241,11 +2420,12 @@ export default function todosExtension(pi: ExtensionAPI) {
 					}
 					await ensureTodosDir(todosDir);
 					const id = await generateTodoId(todosDir);
-					const filePath = getTodoPath(todosDir, id);
 					const title = searchTerm.length > 80 ? searchTerm.slice(0, 77) + "..." : searchTerm;
+					const filePath = newTodoPath(todosDir, id, title);
 					const todo: TodoRecord = {
 						id,
 						title,
+						slug: slugifyTodo(title),
 						tags: [],
 						status: "open",
 						created_at: new Date().toISOString(),
@@ -2272,10 +2452,11 @@ export default function todosExtension(pi: ExtensionAPI) {
 						const title = text.length > 80 ? text.slice(0, 77) + "..." : text;
 						await ensureTodosDir(todosDir);
 						const id = await generateTodoId(todosDir);
-						const filePath = getTodoPath(todosDir, id);
+						const filePath = newTodoPath(todosDir, id, title);
 						const todo: TodoRecord = {
 							id,
 							title,
+							slug: slugifyTodo(title),
 							tags: [],
 							status: "open",
 							created_at: new Date().toISOString(),

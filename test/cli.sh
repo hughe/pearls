@@ -166,8 +166,11 @@ else
 	fail "id is 8-char hex" "got '$ID'"
 fi
 
-FILE="$WORK/todos/$ID.md"
+# Ask the CLI where the file is rather than composing the path, so these
+# assertions survive the next change to the filename scheme.
+FILE="$(pearls path "$ID")"
 [[ -f "$FILE" ]] && pass "todo file written at $FILE" || fail "todo file exists"
+assert_eq "$(basename "$FILE")" "T$ID-write-docs.md" "filename is T<hex>-<slug>.md"
 
 section "on-disk file format"
 first_char="$(head -c1 "$FILE")"
@@ -366,7 +369,7 @@ assert_contains "$out" "\"parent\": \"$ID\"" "create stores parent in JSON outpu
 CHILD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 [[ ${#CHILD_ID} -eq 8 ]] && pass "child id parsed ($CHILD_ID)" || fail "child id parsed"
 
-CHILD_FILE="$WORK/todos/$CHILD_ID.md"
+CHILD_FILE="$(pearls path "$CHILD_ID")"
 assert_contains "$(cat "$CHILD_FILE")" '"priority": 2' "front matter contains priority"
 assert_contains "$(cat "$CHILD_FILE")" "\"parent\": \"$ID\"" "front matter contains parent"
 
@@ -486,7 +489,7 @@ cat > "$BEADS_FILE" <<'JSONL'
 JSONL
 
 IMPORT_DIR="$WORK/import-todos"
-out="$(pearls --todo-dir "$IMPORT_DIR" import-beads "$BEADS_FILE")"
+out="$(pearls --no-gc --todo-dir "$IMPORT_DIR" import-beads "$BEADS_FILE")"
 assert_contains "$out" "imported 2 issue(s)" "import reports issue count"
 assert_contains "$out" "1 memory record" "import reports memory count"
 
@@ -498,11 +501,13 @@ mem_line=$(cat "$IMPORT_DIR/memories.jsonl")
 assert_contains "$mem_line" '"id":"mem-1"' "memory record preserved verbatim"
 
 # Spot-check a generated todo: original beads id + status mapping land
-# correctly, description leads the body.
-out="$(pearls --todo-dir "$IMPORT_DIR" search -f docker --closed)"
+# correctly, description leads the body. --no-gc because the fixture's
+# dates are fixed in the past: the closed issue is well beyond gcDays, so
+# a gc pass would retire it before the search runs.
+out="$(pearls --no-gc --todo-dir "$IMPORT_DIR" search -f docker --closed)"
 hit_id=$(printf '%s\n' "$out" | extract_id)
 [[ -n "$hit_id" ]] || fail "search found imported issue"
-out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
+out="$(pearls --no-gc --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
 assert_contains "$out" "status: closed" "closed beads issue maps to closed pearl"
 assert_contains "$out" "| Original ID | sldb-3l0 |" "body records original beads id"
 assert_contains "$out" "# Don't use docker for CDK" "body has title heading"
@@ -511,9 +516,9 @@ assert_contains "$out" "Copy shared libs" "body includes description"
 assert_contains "$out" "[beads, task]" "tags include beads + issue_type"
 
 # In-progress status is preserved verbatim (not normalised to open/closed).
-out="$(pearls --todo-dir "$IMPORT_DIR" search -f ConditionFailed)"
+out="$(pearls --no-gc --todo-dir "$IMPORT_DIR" search -f ConditionFailed)"
 hit_id=$(printf '%s\n' "$out" | extract_id)
-out="$(pearls --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
+out="$(pearls --no-gc --todo-dir "$IMPORT_DIR" get "TODO-$hit_id")"
 assert_contains "$out" "status: in_progress" "in_progress preserved verbatim"
 assert_contains "$out" "| Dependencies | blocks" "dependencies rendered"
 
@@ -649,6 +654,140 @@ assert_not_contains "$out" '"assigned_to_session"' "round-trip: release clears a
 
 # Clean up.
 pearls delete "TODO-$RT_ID" >/dev/null
+
+section "filename slugs"
+# Slug is derived from the title: lowercased, non-alphanumerics collapsed
+# to '-', and only then truncated to 40 chars.
+SLUG_ID="$(pearls create 'TUI: Ctrl+Shift+M toggle for memories in /pearls' | extract_id)"
+assert_eq "$(basename "$(pearls path "$SLUG_ID")")" \
+	"T$SLUG_ID-tui-ctrl-shift-m-toggle-for-memories-in.md" "long title is sanitised and cut to 40"
+
+EMPTY_ID="$(pearls create '???' | extract_id)"
+assert_eq "$(basename "$(pearls path "$EMPTY_ID")")" "T$EMPTY_ID-untitled.md" \
+	"title with no usable characters falls back to 'untitled'"
+
+# --slug overrides the title, and cannot escape the todos directory.
+ESCAPE_ID="$(pearls create 'Some title' --slug '../../etc/passwd' | extract_id)"
+assert_eq "$(basename "$(pearls path "$ESCAPE_ID")")" "T$ESCAPE_ID-etc-passwd.md" \
+	"--slug is sanitised, no path traversal"
+[[ -f "$WORK/todos/T$ESCAPE_ID-etc-passwd.md" ]] && pass "slugged file stays in the todos dir" \
+	|| fail "slugged file stays in the todos dir"
+
+section "rename policy"
+RN_ID="$(pearls create 'Original title' | extract_id)"
+pearls update "$RN_ID" --title 'Retitled entirely' --json >/dev/null
+assert_eq "$(basename "$(pearls path "$RN_ID")")" "T$RN_ID-original-title.md" \
+	"update --title does not rename the file"
+
+pearls reslug "$RN_ID" >/dev/null
+assert_eq "$(basename "$(pearls path "$RN_ID")")" "T$RN_ID-retitled-entirely.md" \
+	"reslug re-derives the name from the title"
+
+pearls update "$RN_ID" --slug 'hand picked' --json >/dev/null
+assert_eq "$(basename "$(pearls path "$RN_ID")")" "T$RN_ID-hand-picked.md" \
+	"update --slug renames the file"
+assert_contains "$(pearls get "$RN_ID" --json)" '"slug": "hand-picked"' "slug persists in front matter"
+
+section "legacy filenames and migration"
+# A pearl written before the T<hex>-<slug> scheme must keep working.
+cat > "$WORK/todos/deadbeef.md" <<'LEGACY'
+{
+  "id": "deadbeef",
+  "title": "Legacy pearl",
+  "tags": [],
+  "status": "open",
+  "created_at": "2026-01-01T00:00:00.000Z"
+}
+
+# Legacy pearl
+LEGACY
+assert_contains "$(pearls get TODO-deadbeef --json)" '"title": "Legacy pearl"' \
+	"legacy <hex>.md is still readable"
+assert_contains "$(pearls list)" "Legacy pearl" "legacy pearl appears in list"
+
+out="$(pearls migrate-filenames --dry-run)"
+assert_contains "$out" "deadbeef.md -> Tdeadbeef-legacy-pearl.md" "dry run reports the rename"
+[[ -f "$WORK/todos/deadbeef.md" ]] && pass "dry run does not move anything" \
+	|| fail "dry run does not move anything"
+
+out="$(pearls migrate-filenames)"
+assert_contains "$out" "deadbeef.md -> Tdeadbeef-legacy-pearl.md" "migration reports the rename"
+[[ -f "$WORK/todos/Tdeadbeef-legacy-pearl.md" ]] && pass "legacy file renamed" || fail "legacy file renamed"
+assert_contains "$(pearls get TODO-deadbeef --json)" '"title": "Legacy pearl"' \
+	"id still resolves after migration"
+
+out="$(pearls migrate-filenames)"
+assert_contains "$out" "renamed 0 file(s)" "second migration run is a no-op"
+
+section "archive on gc"
+# Separate todos dir: these settings collect aggressively.
+GCDIR="$WORK/gctodos"
+mkdir -p "$GCDIR"
+printf '{"gc": true, "gcDays": 30, "archive": true}\n' > "$GCDIR/settings.json"
+
+# Closed long ago -> archived.
+cat > "$GCDIR/Tcafe0001-retired.md" <<'OLD'
+{
+  "id": "cafe0001",
+  "title": "Retired long ago",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z",
+  "closed_at": "2020-02-01T00:00:00.000Z"
+}
+OLD
+# Created long ago but closed recently -> must survive (ages by closed_at).
+cat > "$GCDIR/Tcafe0002-just-closed.md" <<OLD
+{
+  "id": "cafe0002",
+  "title": "Closed just now",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z",
+  "closed_at": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+}
+OLD
+# Closed before closed_at existed -> falls back to created_at, so archived.
+cat > "$GCDIR/Tcafe0003-no-closed-at.md" <<'OLD'
+{
+  "id": "cafe0003",
+  "title": "No closed_at",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z"
+}
+OLD
+
+pearls --todo-dir "$GCDIR" list-all >/dev/null   # triggers gc
+[[ -f "$GCDIR/archive/Tcafe0001-retired.md" ]] && pass "old closed pearl moved to archive" \
+	|| fail "old closed pearl moved to archive"
+[[ -f "$GCDIR/Tcafe0002-just-closed.md" ]] && pass "recently closed pearl survives gc" \
+	|| fail "recently closed pearl survives gc"
+[[ -f "$GCDIR/archive/Tcafe0003-no-closed-at.md" ]] && pass "missing closed_at falls back to created_at" \
+	|| fail "missing closed_at falls back to created_at"
+
+out="$(pearls --todo-dir "$GCDIR" list-all)"
+assert_not_contains "$out" "Retired long ago" "archived pearl is out of list-all"
+out="$(pearls --todo-dir "$GCDIR" list-all --archived)"
+assert_contains "$out" "Retired long ago" "--archived brings it back"
+assert_contains "$(pearls --todo-dir "$GCDIR" get TODO-cafe0001 --json)" '"title": "Retired long ago"' \
+	"archived pearl is still readable by id"
+
+# archive: false keeps the old delete-on-gc behaviour.
+printf '{"gc": true, "gcDays": 30, "archive": false}\n' > "$GCDIR/settings.json"
+cat > "$GCDIR/Tcafe0004-doomed.md" <<'OLD'
+{
+  "id": "cafe0004",
+  "title": "Doomed",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z",
+  "closed_at": "2020-02-01T00:00:00.000Z"
+}
+OLD
+pearls --todo-dir "$GCDIR" list-all >/dev/null
+[[ ! -f "$GCDIR/Tcafe0004-doomed.md" && ! -f "$GCDIR/archive/Tcafe0004-doomed.md" ]] \
+	&& pass "archive:false deletes as before" || fail "archive:false deletes as before"
 
 section "--no-gc"
 # Can't easily test GC without time travel; just assert the flag is

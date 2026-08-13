@@ -12,10 +12,19 @@ and a human can use the same commands from the terminal. If you do happen
 to be running Pi, its `/pearls` UI reads and writes the same files, so all
 three surfaces stay in sync.
 
-Todos live in `.pi/todos/<id>.md` (override with `--todo-dir` or
-`$PI_TODO_PATH`). They are intended to be **committed to the repo** so
-everybody — humans and agents, on every checkout — sees the same backlog.
-Only the per-session `*.lock` files are gitignored.
+Todos live in `.pi/todos/T<id>-<slug>.md` (override the directory with
+`--todo-dir` or `$PEARLS_DIR`). The hex `<id>` is what every command
+resolves; the `<slug>` is derived from the title purely so the directory
+reads well. They are intended to be **committed to the repo** so everybody
+— humans and agents, on every checkout — sees the same backlog. Only the
+per-session `*.lock` files are gitignored.
+
+Pearls written before this scheme are named `<id>.md`. They keep working
+everywhere — an un-migrated checkout is never broken — and
+`pearls migrate-filenames` converts them.
+
+Closed todos are not deleted when they age out: `pearls` moves them to
+`.pi/todos/archive/`, which is committed alongside the backlog.
 
 ## Layout
 
@@ -49,6 +58,8 @@ pearls list --json                             # machine-readable (matches Pi to
 pearls search readme                           # fuzzy-search open todos
 pearls search readme --closed                  # include closed todos in results
 pearls get TODO-deadbeef                       # show one
+pearls create "A long title" --slug short      # choose the filename slug
+pearls migrate-filenames --dry-run             # preview <id>.md renames
 pearls append TODO-deadbeef --stdin-body < notes.md
 pearls close TODO-deadbeef                     # shortcut for --status closed
 pearls claim TODO-deadbeef --session mysession # --force to steal
@@ -75,16 +86,24 @@ Global flags:
   tool returns to an LLM), suitable for any agent that parses tool output.
 - `--no-gc` — skip startup GC of old closed todos.
 
+Storage settings live in `<todos-dir>/settings.json`:
+
+- `gc` (default `true`) — retire closed todos on startup.
+- `gcDays` (default `30`) — how long after `closed_at` a todo is retired.
+  Todos closed before `closed_at` existed fall back to `created_at`.
+- `archive` (default `true`) — move retired todos to `<todos-dir>/archive/`
+  instead of deleting them.
+
 ## Commands
 
 | Command                 | Notes                                                                |
 | ----------------------- | -------------------------------------------------------------------- |
 | `list`                  | Open + assigned todos (default).                                     |
-| `list-all`              | Includes closed.                                                     |
+| `list-all`              | Includes closed. `--archived` also includes the archive.             |
 | `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `TODO-<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
 | `get <id>` / `show <id>`| Single todo, body included.                                          |
-| `create <title…>`       | `--tag` (repeatable), `--status`, `--body`, `--body-file`, `--stdin-body`. |
-| `update <id>`           | Same body sources, plus `--title`, `--status`, `--tag` (replaces).   |
+| `create <title…>`       | `--tag` (repeatable), `--status`, `--body`, `--body-file`, `--stdin-body`, `--slug` (filename slug; defaults to the title). |
+| `update <id>`           | Same body sources, plus `--title`, `--status`, `--tag` (replaces), `--slug` (renames the file). |
 | `append <id>`           | Append markdown to body (from `--body` / file / stdin).              |
 | `close <id>`            | Shortcut for `update --status closed`.                               |
 | `reopen <id>`           | Shortcut for `update --status open`.                                 |
@@ -93,11 +112,17 @@ Global flags:
 | `delete <id>`           | Remove a todo.                                                       |
 | `dir`                   | Print the resolved todos directory.                                  |
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
+| `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
+| `migrate-filenames`     | Rename legacy `<id>.md` files to `T<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 | `import-beads <file>`   | Import a beads `issues.jsonl` file: one pearl per issue, description first in the body, beads metadata (original id, type, priority, dates, dependencies, …) appended as markdown. Records without a `title` (e.g. memories) are appended verbatim to `<todos-dir>/memories.jsonl`. Supports `--dry-run` and `--json`. |
 
-Ids may be written as `TODO-<hex>` or the raw `<hex>` filename; both are
-accepted everywhere, matching the Pi `pearls` tool.
+Ids may be written as `TODO-<hex>` or the raw `<hex>`; both are accepted
+everywhere, matching the Pi `pearls` tool.
+
+Renaming a pearl file by hand is safe as long as the `T<hex>-` prefix
+survives — that hex is the id, and the slug is only decoration. Retitling a
+todo deliberately does *not* rename its file; use `reslug` for that.
 
 ## Tests
 
