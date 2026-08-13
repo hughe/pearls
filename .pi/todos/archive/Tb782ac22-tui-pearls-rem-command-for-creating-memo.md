@@ -8,7 +8,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.350Z",
   "priority": 2,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "tui-pearls-rem-command-for-creating-memo"
 }
 
 # TUI: /pearls rem command for creating memories

@@ -8,7 +8,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.342Z",
   "priority": 1,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "cli-pearls-memories-command-and-type-fla"
 }
 
 # CLI: pearls memories command and --type flag on create

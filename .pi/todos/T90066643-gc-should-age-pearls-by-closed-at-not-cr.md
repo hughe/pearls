@@ -9,7 +9,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:58:40.498Z",
   "priority": 1,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "gc-should-age-pearls-by-closed-at-not-cr"
 }
 
 # GC should age pearls by closed_at, not created_at

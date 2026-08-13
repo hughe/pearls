@@ -4,7 +4,8 @@
   "tags": [],
   "status": "closed",
   "created_at": "2026-04-30T21:24:40.626Z",
-  "type": "memory"
+  "type": "memory",
+  "slug": "this-is-a-test-memory"
 }
 
 # this is a test memory.

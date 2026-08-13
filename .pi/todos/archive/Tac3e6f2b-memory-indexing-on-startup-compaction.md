@@ -7,7 +7,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.384Z",
   "priority": 2,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "memory-indexing-on-startup-compaction"
 }
 
 # Memory indexing on startup/compaction

@@ -7,7 +7,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.350Z",
   "priority": 1,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "add-type-field-to-file-format-and-parse"
 }
 
 # Add type field to file format and parse/serialize logic

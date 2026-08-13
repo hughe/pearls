@@ -7,7 +7,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:50:00.427Z",
   "priority": 3,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "migrate-this-repo-s-own-pi-todos-to-the"
 }
 
 # Migrate this repo's own .pi/todos to the new scheme

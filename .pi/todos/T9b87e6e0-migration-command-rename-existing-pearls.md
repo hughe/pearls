@@ -9,7 +9,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:49:23.680Z",
   "priority": 1,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "migration-command-rename-existing-pearls"
 }
 
 # Migration command: rename existing pearls into the new scheme

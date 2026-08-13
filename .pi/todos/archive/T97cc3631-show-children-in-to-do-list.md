@@ -4,7 +4,8 @@
   "tags": [],
   "status": "closed",
   "created_at": "2026-04-27T18:51:22.988Z",
-  "priority": 1
+  "priority": 1,
+  "slug": "show-children-in-to-do-list"
 }
 
 The To-Do List should display children below their parent, indented by two spaces, using ASCII tree characters:

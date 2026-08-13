@@ -9,7 +9,8 @@
   ],
   "status": "closed",
   "created_at": "2026-04-29T18:21:02.926Z",
-  "priority": 1
+  "priority": 1,
+  "slug": "add-a-pearls-skill-for-use-in-claude-and"
 }
 
 ## Goal

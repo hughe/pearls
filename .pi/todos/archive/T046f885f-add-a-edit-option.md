@@ -3,7 +3,8 @@
   "title": "Add a edit option.",
   "tags": [],
   "status": "closed",
-  "created_at": "2026-04-27T00:46:21.751Z"
+  "created_at": "2026-04-27T00:46:21.751Z",
+  "slug": "add-a-edit-option"
 }
 
 # Description 

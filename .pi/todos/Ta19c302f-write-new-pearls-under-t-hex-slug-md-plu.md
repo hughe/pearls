@@ -8,7 +8,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:49:21.021Z",
   "priority": 1,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "write-new-pearls-under-t-hex-slug-md-plu"
 }
 
 # Write new pearls under T<hex>-<slug>.md, plus a reslug command

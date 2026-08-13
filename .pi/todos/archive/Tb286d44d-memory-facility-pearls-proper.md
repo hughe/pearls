@@ -7,7 +7,8 @@
   ],
   "status": "closed",
   "created_at": "2026-04-26T23:54:08.983Z",
-  "priority": 2
+  "priority": 2,
+  "slug": "memory-facility-pearls-proper"
 }
 
 ## Overview

@@ -7,7 +7,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:49:57.915Z",
   "priority": 2,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "docs-readme-cli-help-quickstart-and-skil"
 }
 
 # Docs: README, CLI help, quickstart and SKILL.md for the new layout

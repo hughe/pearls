@@ -3,7 +3,8 @@
   "title": "Add an importer for beads.",
   "tags": [],
   "status": "closed",
-  "created_at": "2026-04-27T00:30:21.068Z"
+  "created_at": "2026-04-27T00:30:21.068Z",
+  "slug": "add-an-importer-for-beads"
 }
 
 # Description

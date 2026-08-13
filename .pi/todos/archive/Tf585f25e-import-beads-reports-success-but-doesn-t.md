@@ -7,7 +7,8 @@
   ],
   "status": "closed",
   "created_at": "2026-04-28T16:10:34.762Z",
-  "priority": 0
+  "priority": 0,
+  "slug": "import-beads-reports-success-but-doesn-t"
 }
 
 ## Bug

@@ -8,7 +8,8 @@
   "status": "closed",
   "created_at": "2026-04-30T14:32:37.365Z",
   "priority": 2,
-  "parent": "b286d44d"
+  "parent": "b286d44d",
+  "slug": "tui-ctrl-shift-m-filter-toggle-for-memor"
 }
 
 # TUI: Ctrl+Shift+M filter toggle for memories in /pearls

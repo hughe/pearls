@@ -7,7 +7,8 @@
   ],
   "status": "closed",
   "created_at": "2026-04-28T20:04:59.552Z",
-  "priority": 2
+  "priority": 2,
+  "slug": "find-pearls-directory-by-walking-up-from"
 }
 
 Replace the current hardcoded `<cwd>/.pi/todos` resolution in `getTodosDir()` with a walk-up search, and introduce a new `PEARLS_DIR` env var.

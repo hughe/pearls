@@ -7,7 +7,8 @@
   "status": "open",
   "created_at": "2026-08-13T21:49:55.199Z",
   "priority": 2,
-  "parent": "cec97615"
+  "parent": "cec97615",
+  "slug": "tests-for-slugs-mixed-scheme-directories"
 }
 
 # Tests for slugs, mixed-scheme directories, migration and archiving
