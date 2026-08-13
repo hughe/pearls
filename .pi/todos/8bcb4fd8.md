@@ -36,3 +36,11 @@ four go stale with this epic.
 Also bump the package version, and add a short note to the README covering
 what happens on an un-migrated checkout (legacy names keep working) so
 nobody panics at a mixed directory.
+
+## Also document
+
+- `pearls reslug <id>` and the rename policy: the slug is frozen at
+  creation, `update --title` does not rename.
+- That `.pi/todos/archive/` is committed to git, and that `pearls delete`
+  is still a true delete while GC archives.
+- `list-all --archived`.
