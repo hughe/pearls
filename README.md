@@ -115,7 +115,6 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
 | `migrate-filenames`     | Rename legacy `<id>.md` files to `T<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
-| `import-beads <file>`   | Import a beads `issues.jsonl` file: one pearl per issue, description first in the body, beads metadata (original id, type, priority, dates, dependencies, …) appended as markdown. Records without a `title` (e.g. memories) are appended verbatim to `<todos-dir>/memories.jsonl`. Supports `--dry-run` and `--json`. |
 
 Ids may be written as `TODO-<hex>` or the raw `<hex>`; both are accepted
 everywhere, matching the Pi `pearls` tool.
