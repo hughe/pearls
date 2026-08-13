@@ -34,14 +34,18 @@ import {
 	formatTodoList,
 	garbageCollectTodos,
 	generateTodoId,
+	getTodoArchiveDir,
 	getTodoPath,
 	getTodosDir,
 	hasPiTodoPathDeprecation,
 	listTodos,
+	newTodoPath,
 	readTodoSettings,
 	releaseTodoAssignment,
+	renameTodoFile,
 	serializeTodoForAgent,
 	serializeTodoListForAgent,
+	slugifyTodo,
 	splitTodosByAssignment,
 	updateTodoStatus,
 	validatePriority,
@@ -52,6 +56,7 @@ import {
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { importBeads } from "./import-beads.js";
+import { migrateTodoFilenames } from "./migrate-filenames.js";
 
 // ---------------------------------------------------------------------------
 // Stub ExtensionContext
@@ -112,6 +117,7 @@ const KNOWN_STRING_FLAGS = new Set([
 	"fuzzy",
 	"child-of",
 	"type",
+	"slug",
 ]);
 
 // Short flags that take a value, mapped to their long-form key.
@@ -134,6 +140,7 @@ const KNOWN_BOOL_FLAGS = new Set([
 	"quiet",
 	"no-gc",
 	"dry-run",
+	"archived",
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -334,13 +341,16 @@ GLOBAL FLAGS
   --json                 Emit stable JSON (identical to Pi's todo tool output),
                          suitable for any agent that parses tool results.
   --no-gc                Skip the normal startup garbage collection of old
-                         closed todos.
+                         closed todos. GC moves them to <todos-dir>/archive
+                         rather than deleting them (set "archive": false in
+                         settings.json for the old delete behaviour).
   -h, --help             Show this help.
       --version          Print version and exit.
 
 COMMANDS
   list                   List open + assigned todos (default human output).
-  list-all               List every todo including closed.
+  list-all               List every todo including closed. Add --archived to
+                         include todos GC has moved to <todos-dir>/archive.
   search [filters]       Filter todos. At least one of:
                            -f, --fuzzy <term>      Fuzzy-match id/title/
                                                     tags/status/assignee.
@@ -356,11 +366,14 @@ COMMANDS
   create <title...>      Create a new todo. Flags: --tag <t> (repeatable),
                          --status <s>, --body <text>, --body-file <file>,
                          --stdin-body, --priority <0-4>, --parent <id>,
-                         --type <todo|memory> (default: todo).
+                         --type <todo|memory> (default: todo),
+                         --slug <text> (filename slug; defaults to the
+                         title).
   update <id>            Update a todo. Flags: --title, --status, --tag
                          (repeatable, replaces), --body, --body-file,
                          --stdin-body, --priority <0-4>, --parent <id>
-                         (pass empty string to clear).
+                         (pass empty string to clear), --slug <text>
+                         (renames the file; --title alone does not).
   append <id>            Append markdown to a todo's body. Body sources as
                          for create.
   delete <id>            Delete a todo.
@@ -374,6 +387,11 @@ COMMANDS
                          to type=Memory entries).
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
+  reslug <id>            Re-derive the filename slug from the todo's current
+                         title and rename the file.
+  migrate-filenames      Rename todos still using the old <hex>.md scheme to
+                         T<hex>-<slug>.md. --dry-run to preview, --force to
+                         disambiguate a name that is already taken.
   summarize-memories   List memory index (title + ID only, no bodies).
                          --closed to include closed/stale memories.
                          Use --json for machine-readable output.
@@ -403,13 +421,16 @@ EXAMPLES
   pearls search -c TODO-deadbeef       # children of TODO-deadbeef
   pearls append TODO-deadbeef --stdin-body < notes.md
   pearls close TODO-deadbeef
+  pearls create "Long title here" --slug short-name
+  pearls migrate-filenames --dry-run
   PI_TODO_PATH=./todos pearls list
 `;
 
 const QUICKSTART = `pearls quickstart — an agent's guide to driving the todo list
 
 WHAT THIS IS
-  pearls is a CLI for a shared todo backlog living in .pi/todos/<id>.md.
+  pearls is a CLI for a shared todo backlog living in
+  .pi/todos/T<id>-<slug>.md.
   Files are committed to the repo, so humans and agents on every checkout
   see the same list. Any agent that can run a shell command can use it.
 
@@ -453,9 +474,22 @@ INSPECTING / SEARCHING
   pearls search -c TODO-<id>      # children of <id>
   pearls list-all                 # everything, including closed
 
-IDS
+IDS AND FILENAMES
   Ids are written as TODO-<hex> in output, but every command also accepts
   the bare <hex>. Copy-paste either form.
+
+  On disk a pearl is T<hex>-<slug>.md. The hex is the id and is what every
+  command resolves; the slug is derived from the title so the directory is
+  readable, and it does not change when you retitle a todo (use
+  'pearls reslug <id>' or 'pearls update <id> --slug <text>' for that).
+  Files named <hex>.md predate this scheme, still work, and can be
+  converted with 'pearls migrate-filenames'.
+
+ARCHIVE
+  Closed todos older than gcDays are moved to .pi/todos/archive rather
+  than deleted. They drop out of list/list-all but 'pearls get <id>' and
+  'pearls list-all --archived' still reach them. 'pearls delete' is a real
+  delete and is still for mistakes only.
 
 OUTPUT FOR AGENTS
   Add --json to list / search / get / create / update for a stable
@@ -464,7 +498,9 @@ OUTPUT FOR AGENTS
 
 WHAT NOT TO DO
   - Don't edit .pi/todos/*.md by hand while pearls is running; the lock
-    files (.lock) coordinate concurrent writers.
+    files (.lock) coordinate concurrent writers. Renaming a file by hand is
+    survivable as long as the T<hex>- prefix stays intact — that hex is the
+    id — but 'pearls reslug' is the safe way to do it.
   - Don't reuse another session's id to bypass claim/release; use --force
     if you genuinely need to steal, so the audit trail is honest.
   - Don't delete todos to "close" them — use 'pearls close'. Deletes are
@@ -574,6 +610,10 @@ async function main(argv: string[]): Promise<void> {
 			return;
 		case "path":
 			return cmdPath(run);
+		case "reslug":
+			return await cmdReslug(run);
+		case "migrate-filenames":
+			return await cmdMigrateFilenames(run);
 	case "summarize-memories":
 			return await cmdSummarizeMemories(run);
 		case "refine":
@@ -595,6 +635,12 @@ async function cmdList(
 	opts: { includeClosed: boolean },
 ): Promise<void> {
 	const allTodos = await listTodos(run.todosDir);
+	// GC moves retired pearls into <todos-dir>/archive; --archived folds
+	// them back into the listing (they are closed, so they show up in the
+	// closed section).
+	if (run.flags.archived) {
+		allTodos.push(...(await listTodos(getTodoArchiveDir(run.todosDir))));
+	}
 	const todos = allTodos.filter((t) => t.type !== "memory");
 	const listed = opts.includeClosed
 		? todos
@@ -743,8 +789,15 @@ async function cmdCreate(run: RunContext): Promise<void> {
 		`# ${title}\n\n## Description\n\n` +
 		(descriptionContent ? descriptionContent + "\n" : "");
 
+	// Filename slug: --slug if given, else derived from the title. It is
+	// frozen from here on; see `reslug` / `update --slug` to change it.
+	const slug = slugifyTodo(
+		typeof run.flags.slug === "string" && run.flags.slug.trim()
+			? run.flags.slug
+			: title,
+	);
 	const id = await generateTodoId(run.todosDir);
-	const filePath = getTodoPath(run.todosDir, id);
+	const filePath = newTodoPath(run.todosDir, id, slug);
 	const todoType = typeof run.flags.type === "string" && run.flags.type.toLowerCase() === "memory" ? "memory" as const : undefined;
 	const todo: TodoRecord = {
 		id,
@@ -755,6 +808,7 @@ async function cmdCreate(run: RunContext): Promise<void> {
 		priority,
 		parent: parent ?? undefined,
 		type: todoType,
+		slug,
 		body,
 	};
 
@@ -781,6 +835,13 @@ async function cmdUpdate(run: RunContext): Promise<void> {
 	const body = await readBody(run.flags);
 	const priority = getPriority(run.flags);
 	const parent = getParent(run.flags);
+	// Only an explicit --slug renames the file. Retitling deliberately does
+	// not: it would churn git history and invalidate paths people have
+	// copied. Use `pearls reslug <id>` to re-derive from the title.
+	const slug =
+		typeof run.flags.slug === "string" && run.flags.slug.trim()
+			? slugifyTodo(run.flags.slug)
+			: undefined;
 
 	if (
 		title === undefined &&
@@ -788,10 +849,11 @@ async function cmdUpdate(run: RunContext): Promise<void> {
 		tags === undefined &&
 		body === undefined &&
 		priority === undefined &&
-		parent === undefined
+		parent === undefined &&
+		slug === undefined
 	) {
 		throw new CliError(
-			"update requires at least one of --title, --status, --tag, --body, --body-file, --stdin-body, --priority, --parent",
+			"update requires at least one of --title, --status, --tag, --body, --body-file, --stdin-body, --priority, --parent, --slug",
 		);
 	}
 
@@ -805,9 +867,13 @@ async function cmdUpdate(run: RunContext): Promise<void> {
 		if (body !== undefined) existing.body = body;
 		if (priority !== undefined) existing.priority = priority;
 		if (parent !== undefined) existing.parent = parent ?? undefined;
+		if (slug !== undefined) existing.slug = slug;
 		if (!existing.created_at) existing.created_at = new Date().toISOString();
 		clearAssignmentIfClosed(existing);
 		await writeTodoFile(filePath, existing);
+		if (slug !== undefined) {
+			await renameTodoFile(run.todosDir, existing, filePath);
+		}
 		return existing;
 	});
 	if (typeof result === "object" && "error" in result) fail(result.error);
@@ -835,6 +901,64 @@ async function cmdAppend(run: RunContext): Promise<void> {
 
 	if (run.json) printJsonTodo(result as TodoRecord);
 	else printHumanTodo(result as TodoRecord);
+}
+
+// ---- reslug ---------------------------------------------------------------
+
+async function cmdReslug(run: RunContext): Promise<void> {
+	const id = resolveId(run);
+	const filePath = getTodoPath(run.todosDir, id);
+	if (!existsSync(filePath)) fail(`Todo ${formatTodoId(id)} not found`);
+
+	const result = await withTodoLock(run.todosDir, id, run.ctx, async () => {
+		const existing = await ensureTodoExists(filePath, id);
+		if (!existing) return { error: `Todo ${formatTodoId(id)} not found` } as const;
+		existing.slug = slugifyTodo(existing.title);
+		await writeTodoFile(filePath, existing);
+		const newPath = await renameTodoFile(run.todosDir, existing, filePath);
+		return { todo: existing, path: newPath } as const;
+	});
+	if (typeof result === "object" && "error" in result) {
+		fail((result as { error: string }).error);
+	}
+
+	const { todo, path: newPath } = result as { todo: TodoRecord; path: string };
+	if (run.json) {
+		process.stdout.write(
+			JSON.stringify({ id: formatTodoId(todo.id), slug: todo.slug, path: path.resolve(newPath) }) + "\n",
+		);
+	} else if (!run.flags.quiet) {
+		process.stdout.write(path.resolve(newPath) + "\n");
+	}
+}
+
+// ---- migrate-filenames ----------------------------------------------------
+
+async function cmdMigrateFilenames(run: RunContext): Promise<void> {
+	const result = await migrateTodoFilenames({
+		todosDir: run.todosDir,
+		ctx: run.ctx,
+		dryRun: Boolean(run.flags["dry-run"]),
+		force: Boolean(run.flags.force),
+	});
+
+	if (run.json) {
+		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+	} else {
+		const verb = run.flags["dry-run"] ? "would rename" : "renamed";
+		for (const rename of result.renamed) {
+			const where = rename.archived ? " (archive)" : "";
+			process.stdout.write(`${rename.from} -> ${rename.to}${where}\n`);
+		}
+		process.stdout.write(
+			`${verb} ${result.renamed.length} file(s), ${result.unchanged} already current\n`,
+		);
+	}
+
+	for (const err of result.errors) {
+		process.stderr.write(`pearls: ${err}\n`);
+	}
+	if (result.errors.length > 0) process.exitCode = 1;
 }
 
 // ---- delete ---------------------------------------------------------------
