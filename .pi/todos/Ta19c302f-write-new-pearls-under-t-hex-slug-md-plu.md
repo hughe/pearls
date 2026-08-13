@@ -5,10 +5,11 @@
     "naming",
     "cli"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:49:21.021Z",
   "priority": 1,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:48.872Z",
   "slug": "write-new-pearls-under-t-hex-slug-md-plu"
 }
 
@@ -53,3 +54,11 @@ command handle bulk.
 `.pi/todos/T<hex>-fix-the-login-page.md`, `pearls path <id>` prints it,
 `get` / `append` / `close` round-trip against it, `update --title` leaves
 the name untouched, and `reslug` moves it.
+
+## Done
+
+`create` (CLI, Pi tool, `/pearls rem`, and the TUI memory input) and
+`import-beads` all name files from the slug. `update --slug` and the new
+`reslug <id>` rename inside the lock; `update --title` deliberately does
+not. Verified: retitling leaves the filename alone, `reslug` picks up the
+new title, and `--slug` overrides both.

@@ -4,10 +4,11 @@
   "tags": [
     "tests"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:49:55.199Z",
   "priority": 2,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:59.232Z",
   "slug": "tests-for-slugs-mixed-scheme-directories"
 }
 
@@ -63,3 +64,15 @@ in `src/pearls-wrapper.ts` would surface.
   `closed_at` at all still ages by `created_at`.
 - `list-all --archived` includes archived pearls, plain `list-all` does not.
 - `delete` still removes the file rather than archiving it.
+
+## Done
+
+192/192 checks pass under both `npm test` and `npm run test:dist`. The
+file-format assertions now ask `pearls path <id>` instead of composing the
+name, so they survive the next scheme change.
+
+Found while doing this: the import-beads section was already failing on
+main. Its fixture uses fixed 2026-04 dates, so the imported closed issue is
+now past gcDays and GC deleted it before the assertions ran — verified
+against origin/main in a scratch worktree. That section now passes
+`--no-gc`.

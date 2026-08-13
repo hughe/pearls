@@ -5,10 +5,11 @@
     "archive",
     "gc"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-13T21:49:26.455Z",
   "priority": 1,
   "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:54.027Z",
   "slug": "archive-closed-pearls-on-gc-instead-of-d"
 }
 
@@ -69,3 +70,15 @@ pearl this repo has ever closed moves to the archive on the first GC pass.
 A pearl closed longer than `gcDays` ago ends up in `.pi/todos/archive/`
 after a GC pass, is absent from `list-all`, appears under
 `list-all --archived`, and is still readable via `get`.
+
+## Done
+
+GC moves retired pearls to `<todos-dir>/archive/` (mkdir on demand, EXDEV
+copy+unlink fallback, numeric suffix on collision). `archive: true` is the
+default; `false` restores delete-on-GC. `get`/`path` resolve archived
+pearls, `list-all --archived` lists them, `delete` is still a true delete.
+
+One change from the plan: a file already named `T<hex>-<slug>.md` keeps its
+name when archived — archiving is not the moment to renumber someone's
+filenames. Only legacy `<hex>.md` names are normalised on the way in, so
+the archive never needs migrating itself.
