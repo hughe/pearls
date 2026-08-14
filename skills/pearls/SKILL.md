@@ -12,7 +12,7 @@ description: >
 compatibility: Requires the pearls CLI on $PATH. Works with any agent that can run shell commands.
 metadata:
   author: pearls
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Pearls — Todo & Memory Management Skill
@@ -62,8 +62,9 @@ When the user asks you to remember something:
 Todos and memories are identified as `TODO-<hex>` (e.g. `TODO-b766eeb7`). Both the
 full form and the bare hex are accepted by every command.
 
-On disk each one is `T<hex>-<slug>.md` under `.pi/todos`. The hex is the id;
-the slug just makes the directory readable and is derived from the title
+On disk a todo is `T<hex>-<slug>.md` and a memory is `M<hex>-<slug>.md`,
+both under `.pi/todos`. The hex is the id; the letter follows the entry's
+type and the slug just makes the directory readable, derived from the title
 (override it with `--slug` when creating). Changing a title does not rename
 the file — run `pearls reslug <id>` if the user wants the filename to catch
 up. Closed todos that age out are moved to `.pi/todos/archive/` rather than

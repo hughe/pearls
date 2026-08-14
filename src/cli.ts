@@ -388,9 +388,11 @@ COMMANDS
   path <id>              Print the absolute path to a todo's .md file.
   reslug <id>            Re-derive the filename slug from the todo's current
                          title and rename the file.
-  migrate-filenames      Rename todos still using the old <hex>.md scheme to
-                         T<hex>-<slug>.md. --dry-run to preview, --force to
-                         disambiguate a name that is already taken.
+  migrate-filenames      Bring filenames up to date: todos still using the
+                         old <hex>.md scheme become T<hex>-<slug>.md, and
+                         memories still lettered T become M<hex>-<slug>.md.
+                         --dry-run to preview, --force to disambiguate a
+                         name that is already taken.
   summarize-memories   List memory index (title + ID only, no bodies).
                          --closed to include closed/stale memories.
                          Use --json for machine-readable output.
@@ -424,7 +426,7 @@ const QUICKSTART = `pearls quickstart — an agent's guide to driving the todo l
 
 WHAT THIS IS
   pearls is a CLI for a shared todo backlog living in
-  .pi/todos/T<id>-<slug>.md.
+  .pi/todos/T<id>-<slug>.md, alongside memories in M<id>-<slug>.md.
   Files are committed to the repo, so humans and agents on every checkout
   see the same list. Any agent that can run a shell command can use it.
 
@@ -472,9 +474,10 @@ IDS AND FILENAMES
   Ids are written as TODO-<hex> in output, but every command also accepts
   the bare <hex>. Copy-paste either form.
 
-  On disk a pearl is T<hex>-<slug>.md. The hex is the id and is what every
-  command resolves; the slug is derived from the title so the directory is
-  readable, and it does not change when you retitle a todo (use
+  On disk a todo is T<hex>-<slug>.md and a memory is M<hex>-<slug>.md. The
+  hex is the id and is what every command resolves; the letter follows the
+  entry's type and the slug is derived from the title, both so the
+  directory is readable. The slug does not change when you retitle (use
   'pearls reslug <id>' or 'pearls update <id> --slug <text>' for that).
   Files named <hex>.md predate this scheme, still work, and can be
   converted with 'pearls migrate-filenames'.
@@ -493,8 +496,8 @@ OUTPUT FOR AGENTS
 WHAT NOT TO DO
   - Don't edit .pi/todos/*.md by hand while pearls is running; the lock
     files (.lock) coordinate concurrent writers. Renaming a file by hand is
-    survivable as long as the T<hex>- prefix stays intact — that hex is the
-    id — but 'pearls reslug' is the safe way to do it.
+    survivable as long as the T<hex>- / M<hex>- prefix stays intact — that
+    hex is the id — but 'pearls reslug' is the safe way to do it.
   - Don't reuse another session's id to bypass claim/release; use --force
     if you genuinely need to steal, so the audit trail is honest.
   - Don't delete todos to "close" them — use 'pearls close'. Deletes are
@@ -789,8 +792,9 @@ async function cmdCreate(run: RunContext): Promise<void> {
 			: title,
 	);
 	const id = await generateTodoId(run.todosDir);
-	const filePath = newTodoPath(run.todosDir, id, slug);
 	const todoType = typeof run.flags.type === "string" && run.flags.type.toLowerCase() === "memory" ? "memory" as const : undefined;
+	// Memories are prefixed M, todos T, so a directory listing separates them.
+	const filePath = newTodoPath(run.todosDir, id, slug, todoType);
 	const todo: TodoRecord = {
 		id,
 		title,

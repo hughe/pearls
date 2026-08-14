@@ -522,6 +522,8 @@ pearls delete "TODO-$RT_ID" >/dev/null
 RT_ID="$(pearls create 'A memory' --type memory --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 out="$(pearls get "TODO-$RT_ID" --json)"
 assert_contains "$out" '"type": "memory"' "--type memory sets type field"
+assert_eq "$(basename "$(pearls path "$RT_ID")")" "M$RT_ID-a-memory.md" \
+	"memory filename uses the M prefix"
 pearls delete "TODO-$RT_ID" >/dev/null
 
 # Unknown short flag errors
@@ -656,6 +658,44 @@ assert_contains "$(pearls get TODO-deadbeef --json)" '"title": "Legacy pearl"' \
 out="$(pearls migrate-filenames)"
 assert_contains "$out" "renamed 0 file(s)" "second migration run is a no-op"
 
+section "memory filename prefix"
+# Todos are T<hex>-<slug>.md, memories M<hex>-<slug>.md; the front matter
+# type is what decides, the prefix letter follows it.
+MEM_ID="$(pearls create 'Prefers tabs over spaces' --type memory | extract_id)"
+TODO_ID="$(pearls create 'Ship the thing' | extract_id)"
+assert_eq "$(basename "$(pearls path "$MEM_ID")")" "M$MEM_ID-prefers-tabs-over-spaces.md" \
+	"new memory gets the M prefix"
+assert_eq "$(basename "$(pearls path "$TODO_ID")")" "T$TODO_ID-ship-the-thing.md" \
+	"new todo keeps the T prefix"
+
+# A memory written before the M prefix existed is re-lettered by the
+# migration, and stays resolvable throughout.
+cat > "$WORK/todos/Tcafe1234-legacy-memory.md" <<'LEGACYMEM'
+{
+  "id": "cafe1234",
+  "title": "Legacy memory",
+  "tags": [],
+  "status": "open",
+  "created_at": "2026-01-01T00:00:00.000Z",
+  "type": "memory",
+  "slug": "legacy-memory"
+}
+
+# Legacy memory
+LEGACYMEM
+assert_contains "$(pearls get TODO-cafe1234 --json)" '"type": "memory"' \
+	"T-prefixed memory is still readable"
+out="$(pearls migrate-filenames --dry-run)"
+assert_contains "$out" "Tcafe1234-legacy-memory.md -> Mcafe1234-legacy-memory.md" \
+	"dry run reports the prefix change"
+pearls migrate-filenames >/dev/null
+assert_eq "$(basename "$(pearls path cafe1234)")" "Mcafe1234-legacy-memory.md" \
+	"migration re-letters the memory"
+assert_contains "$(pearls memories)" "Legacy memory" "re-lettered memory still lists as a memory"
+assert_not_contains "$(pearls list)" "Legacy memory" "memories stay out of the todo list"
+out="$(pearls migrate-filenames)"
+assert_contains "$out" "renamed 0 file(s)" "prefix migration is idempotent"
+
 section "archive on gc"
 # Separate todos dir: these settings collect aggressively.
 GCDIR="$WORK/gctodos"
@@ -702,6 +742,21 @@ pearls --todo-dir "$GCDIR" list-all >/dev/null   # triggers gc
 	|| fail "recently closed pearl survives gc"
 [[ -f "$GCDIR/archive/Tcafe0003-no-closed-at.md" ]] && pass "missing closed_at falls back to created_at" \
 	|| fail "missing closed_at falls back to created_at"
+
+cat > "$GCDIR/Mcafe0005-retired-memory.md" <<'OLDMEM'
+{
+  "id": "cafe0005",
+  "title": "Retired memory",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z",
+  "closed_at": "2020-02-01T00:00:00.000Z",
+  "type": "memory"
+}
+OLDMEM
+pearls --todo-dir "$GCDIR" list-all >/dev/null
+[[ -f "$GCDIR/archive/Mcafe0005-retired-memory.md" ]] \
+	&& pass "archived memory keeps its M prefix" || fail "archived memory keeps its M prefix"
 
 out="$(pearls --todo-dir "$GCDIR" list-all)"
 assert_not_contains "$out" "Retired long ago" "archived pearl is out of list-all"

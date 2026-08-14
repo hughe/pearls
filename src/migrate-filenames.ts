@@ -2,8 +2,9 @@
  * `pearls migrate-filenames` — convert a todos directory to the current
  * filename scheme.
  *
- * Pearls used to be stored as `<hex>.md`; they are now `T<hex>-<slug>.md`,
- * where the slug is derived from the title (or from an explicit `--slug`).
+ * Pearls used to be stored as `<hex>.md`; they are now `T<hex>-<slug>.md`
+ * for todos and `M<hex>-<slug>.md` for memories, where the slug is derived
+ * from the title (or from an explicit `--slug`).
  * Reading both layouts works everywhere, so migrating is optional — but a
  * directory of hex filenames is miserable to browse, which is the whole
  * point of the scheme.
@@ -139,7 +140,9 @@ async function migrateDir(
 		}
 
 		const slug = slugifyTodo(todo.slug || todo.title);
-		const target = todoFileName(name.id, slug);
+		// The front matter decides todo vs memory; the prefix letter follows
+		// it, so a memory that predates the M prefix gets re-lettered here.
+		const target = todoFileName(name.id, slug, todo.type);
 		if (target === entry && todo.slug === slug) {
 			result.unchanged += 1;
 			continue;
