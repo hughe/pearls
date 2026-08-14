@@ -9,8 +9,7 @@
 #
 # Usage:
 #   test/cli.sh                 # use tsx to run src/cli.ts (fast, no build)
-#   PEARLS_BIN=dist test/cli.sh # run the built dist/src/cli.js instead
-#                               # (first runs `npm run build` if needed)
+#   PEARLS_BIN=dist test/cli.sh # build, then run dist/src/cli.js instead
 #
 # Exits non-zero on the first failing assertion.
 
@@ -32,10 +31,11 @@ case "${PEARLS_BIN:-tsx}" in
 		PEARLS_CMD=(node_modules/.bin/tsx src/cli.ts)
 		;;
 	dist)
-		if [[ ! -f dist/src/cli.js ]]; then
-			echo "Building pearls..." >&2
-			npm run --silent build
-		fi
+		# Always rebuild. Testing whether dist/ merely exists means a stale
+		# build silently passes for the code it was built from, not the code
+		# in the working tree.
+		echo "Building pearls..." >&2
+		npm run --silent build
 		PEARLS_CMD=(node dist/src/cli.js)
 		;;
 	*)
