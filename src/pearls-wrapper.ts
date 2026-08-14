@@ -62,13 +62,14 @@ export const newTodoPath: (
 	todosDir: string,
 	id: string,
 	slug: string,
+	type?: TodoType,
 ) => string = todo.newTodoPath;
 export const slugifyTodo: (input: string) => string = todo.slugifyTodo;
-export const todoFileName: (id: string, slug: string) => string =
+export const todoFileName: (id: string, slug: string, type?: TodoType) => string =
 	todo.todoFileName;
 export const parseTodoFileName: (
 	entry: string,
-) => { id: string; slug?: string } | null = todo.parseTodoFileName;
+) => { id: string; slug?: string; type?: TodoType } | null = todo.parseTodoFileName;
 export const getTodoArchiveDir: (todosDir: string) => string =
 	todo.getTodoArchiveDir;
 export const isArchivedTodoPath: (todosDir: string, filePath: string) => boolean =

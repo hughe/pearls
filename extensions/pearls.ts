@@ -61,12 +61,15 @@ const PEARLS_DIR_ENV = "PEARLS_DIR";
 const TODO_SETTINGS_NAME = "settings.json";
 const TODO_ID_PREFIX = "TODO-";
 const TODO_ID_PATTERN = /^[a-f0-9]{8}$/i;
-// Files are named T<hex>-<slug>.md. The hex is the id and is authoritative;
-// the slug is decoration for humans browsing the directory and may drift
-// from the title. Files written before this scheme are named <hex>.md and
-// are still read (and are converted by `pearls migrate-filenames`).
+// Files are named T<hex>-<slug>.md, or M<hex>-<slug>.md for memories, so a
+// directory listing separates the backlog from remembered context at a
+// glance. The hex is the id and is authoritative; the prefix letter and the
+// slug are decoration and may drift (the front matter `type` decides what an
+// entry really is). Files written before this scheme are named <hex>.md and
+// are still read. `pearls migrate-filenames` converts both.
 const TODO_FILE_PREFIX = "T";
-const TODO_FILE_PATTERN = /^T([a-f0-9]{8})-(.+)\.md$/i;
+const MEMORY_FILE_PREFIX = "M";
+const TODO_FILE_PATTERN = /^([TM])([a-f0-9]{8})-(.+)\.md$/i;
 const LEGACY_TODO_FILE_PATTERN = /^([a-f0-9]{8})\.md$/i;
 const SLUG_MAX_LENGTH = 40;
 const SLUG_FALLBACK = "untitled";
@@ -941,7 +944,14 @@ export async function garbageCollectTodos(todosDir: string, settings: TodoSettin
 					if (!Number.isFinite(retiredAt)) return;
 					if (retiredAt >= cutoff) return;
 					if (settings.archive) {
-						await archiveTodoFile(todosDir, filePath, entry, id, parsed.slug || parsed.title);
+						await archiveTodoFile(
+							todosDir,
+							filePath,
+							entry,
+							id,
+							parsed.slug || parsed.title,
+							parsed.type,
+						);
 					} else {
 						await fs.unlink(filePath);
 					}
@@ -971,12 +981,13 @@ async function archiveTodoFile(
 	entry: string,
 	id: string,
 	slugSource: string,
+	type?: TodoType,
 ): Promise<void> {
 	const archiveDir = getTodoArchiveDir(todosDir);
 	await fs.mkdir(archiveDir, { recursive: true });
 
 	const parsedName = parseTodoFileName(entry);
-	const name = parsedName?.slug ? entry : todoFileName(id, slugSource);
+	const name = parsedName?.slug ? entry : todoFileName(id, slugSource, type);
 	let target = path.join(archiveDir, name);
 	for (let attempt = 1; existsSync(target) && attempt < 100; attempt += 1) {
 		target = path.join(archiveDir, name.replace(/\.md$/, `-${attempt}.md`));
@@ -1012,19 +1023,32 @@ export function slugifyTodo(input: string): string {
 	return truncated || SLUG_FALLBACK;
 }
 
-/** Compose the filename for a new (or renamed) todo. */
-export function todoFileName(id: string, slug: string): string {
-	return `${TODO_FILE_PREFIX}${id}-${slugifyTodo(slug)}.md`;
+/** Compose the filename for a new (or renamed) todo or memory. */
+export function todoFileName(id: string, slug: string, type?: TodoType): string {
+	const prefix = type === "memory" ? MEMORY_FILE_PREFIX : TODO_FILE_PREFIX;
+	return `${prefix}${id}-${slugifyTodo(slug)}.md`;
 }
 
 /**
- * Recover the id (and slug) from a directory entry, or null if the entry
- * isn't a todo file. Both the current T<hex>-<slug>.md scheme and the
- * legacy <hex>.md one are recognised, so a half-migrated directory works.
+ * Recover the id (and slug, and what the prefix letter claims the entry is)
+ * from a directory entry, or null if the entry isn't a pearl file. The
+ * current T/M<hex>-<slug>.md scheme and the legacy <hex>.md one are both
+ * recognised, so a half-migrated directory works.
+ *
+ * `type` here is only what the *filename* claims. The front matter is
+ * authoritative; this is for the migration to spot a stale prefix.
  */
-export function parseTodoFileName(entry: string): { id: string; slug?: string } | null {
+export function parseTodoFileName(
+	entry: string,
+): { id: string; slug?: string; type?: TodoType } | null {
 	const match = TODO_FILE_PATTERN.exec(entry);
-	if (match) return { id: match[1]!.toLowerCase(), slug: match[2] };
+	if (match) {
+		return {
+			id: match[2]!.toLowerCase(),
+			slug: match[3],
+			type: match[1]!.toUpperCase() === MEMORY_FILE_PREFIX ? "memory" : "todo",
+		};
+	}
 	const legacy = LEGACY_TODO_FILE_PATTERN.exec(entry);
 	if (legacy) return { id: legacy[1]!.toLowerCase() };
 	return null;
@@ -1034,9 +1058,14 @@ export function getTodoArchiveDir(todosDir: string): string {
 	return path.join(todosDir, TODO_ARCHIVE_DIR_NAME);
 }
 
-/** Path for a todo that does not exist yet. */
-export function newTodoPath(todosDir: string, id: string, slug: string): string {
-	return path.join(todosDir, todoFileName(id, slug));
+/** Path for a todo or memory that does not exist yet. */
+export function newTodoPath(
+	todosDir: string,
+	id: string,
+	slug: string,
+	type?: TodoType,
+): string {
+	return path.join(todosDir, todoFileName(id, slug, type));
 }
 
 function findTodoEntry(dir: string, id: string): string | null {
@@ -1087,7 +1116,7 @@ export async function renameTodoFile(
 	currentPath: string,
 ): Promise<string> {
 	const dir = path.dirname(currentPath);
-	const target = path.join(dir, todoFileName(todo.id, todo.slug || todo.title));
+	const target = path.join(dir, todoFileName(todo.id, todo.slug || todo.title, todo.type));
 	if (path.resolve(target) === path.resolve(currentPath)) return currentPath;
 	await fs.rename(currentPath, target);
 	return target;
@@ -2083,7 +2112,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 					await ensureTodosDir(todosDir);
 					const id = await generateTodoId(todosDir);
 					const slug = slugifyTodo(params.title);
-					const filePath = newTodoPath(todosDir, id, slug);
+					const memoryType = params.type === "memory" ? "memory" as const : undefined;
+					const filePath = newTodoPath(todosDir, id, slug, memoryType);
 					const todo: TodoRecord = {
 						id,
 						title: params.title,
@@ -2092,7 +2122,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						created_at: new Date().toISOString(),
 						priority: params.priority,
 						parent: parentId,
-						type: params.type === "memory" ? "memory" as const : undefined,
+						type: memoryType,
 						slug,
 						body: params.body ?? "",
 					};
@@ -2421,7 +2451,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					await ensureTodosDir(todosDir);
 					const id = await generateTodoId(todosDir);
 					const title = searchTerm.length > 80 ? searchTerm.slice(0, 77) + "..." : searchTerm;
-					const filePath = newTodoPath(todosDir, id, title);
+					const filePath = newTodoPath(todosDir, id, title, "memory");
 					const todo: TodoRecord = {
 						id,
 						title,
@@ -2452,7 +2482,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						const title = text.length > 80 ? text.slice(0, 77) + "..." : text;
 						await ensureTodosDir(todosDir);
 						const id = await generateTodoId(todosDir);
-						const filePath = newTodoPath(todosDir, id, title);
+						const filePath = newTodoPath(todosDir, id, title, "memory");
 						const todo: TodoRecord = {
 							id,
 							title,

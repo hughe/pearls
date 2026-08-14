@@ -12,10 +12,11 @@ and a human can use the same commands from the terminal. If you do happen
 to be running Pi, its `/pearls` UI reads and writes the same files, so all
 three surfaces stay in sync.
 
-Todos live in `.pi/todos/T<id>-<slug>.md` (override the directory with
-`--todo-dir` or `$PEARLS_DIR`). The hex `<id>` is what every command
-resolves; the `<slug>` is derived from the title purely so the directory
-reads well. They are intended to be **committed to the repo** so everybody
+Todos live in `.pi/todos/T<id>-<slug>.md`, and memories — pearls created
+with `--type memory` — in `.pi/todos/M<id>-<slug>.md` (override the
+directory with `--todo-dir` or `$PEARLS_DIR`). The hex `<id>` is what every
+command resolves; the leading letter and the `<slug>` are derived from the
+entry's type and title purely so the directory reads well. They are intended to be **committed to the repo** so everybody
 — humans and agents, on every checkout — sees the same backlog. Only the
 per-session `*.lock` files are gitignored.
 
@@ -113,14 +114,16 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `dir`                   | Print the resolved todos directory.                                  |
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
-| `migrate-filenames`     | Rename legacy `<id>.md` files to `T<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
+| `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 
 Ids may be written as `TODO-<hex>` or the raw `<hex>`; both are accepted
 everywhere, matching the Pi `pearls` tool.
 
-Renaming a pearl file by hand is safe as long as the `T<hex>-` prefix
-survives — that hex is the id, and the slug is only decoration. Retitling a
+Renaming a pearl file by hand is safe as long as the `T<hex>-` / `M<hex>-`
+prefix survives — that hex is the id, and the letter and slug are only
+decoration (the front matter `type` is what actually makes something a
+memory). Retitling a
 todo deliberately does *not* rename its file; use `reslug` for that.
 
 ## Tests
