@@ -12,7 +12,7 @@ description: >
 compatibility: Requires the pearls CLI on $PATH. Works with any agent that can run shell commands.
 metadata:
   author: pearls
-  version: "1.3"
+  version: "1.4"
 ---
 
 # Pearls — Todo & Memory Management Skill
@@ -59,8 +59,10 @@ When the user asks you to remember something:
 
 ## IDs
 
-Todos and memories are identified as `TODO-<hex>` (e.g. `TODO-b766eeb7`). Both the
-full form and the bare hex are accepted by every command.
+Todos are shown as `T<hex>` and memories as `M<hex>` (e.g. `Tb766eeb7`,
+`Mf62de4d8`) — the same letter the file carries. Every command also accepts
+the bare hex, the other letter, and the older `TODO-<hex>` form, so ids from
+old notes still work.
 
 On disk a todo is `T<hex>-<slug>.md` and a memory is `M<hex>-<slug>.md`,
 both under `.pi/todos`. The hex is the id; the letter follows the entry's
@@ -97,7 +99,7 @@ pearls create "Implement login page" \
   --priority 1 \
   --tag feature \
   --tag auth \
-  --parent TODO-a1b2c3d4 \
+  --parent Ta1b2c3d4 \
   --slug login-page \
   --body "Build a login page with email/password. Must validate inputs." \
   --json
@@ -137,7 +139,7 @@ Search requires at least one filter:
 ```
 pearls search -f "login" --json          # fuzzy match
 pearls search -p 0 --json                # priority 0 only
-pearls search -c TODO-a1b2c3d4 --json    # children of an epic
+pearls search -c Ta1b2c3d4 --json       # children of an epic
 pearls search -f "login" --closed --json # include closed
 ```
 

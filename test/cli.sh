@@ -123,9 +123,9 @@ section() {
 
 extract_id() {
 	# Parse the first human-output line, which looks like:
-	#   TODO-<hex> <title>...
-	# Returns just the hex id (no TODO- prefix).
-	awk 'NR==1 { sub(/^TODO-/, "", $1); print $1; exit }'
+	#   T<hex> <title>...   (M<hex> for memories)
+	# Returns just the hex id, with no prefix letter.
+	awk 'NR==1 { sub(/^[TM]/, "", $1); print $1; exit }'
 }
 
 # ---------------------------------------------------------------------------
@@ -154,7 +154,6 @@ assert_eq "$out" "$WORK/todos" "dir resolves to \$PEARLS_DIR"
 
 section "create (human)"
 out="$(pearls create "Write docs" --tag docs --tag readme --body "Initial body.")"
-assert_contains "$out" "TODO-" "create prints an id"
 assert_contains "$out" "Write docs" "create prints title"
 assert_contains "$out" "[docs, readme]" "create prints tags"
 assert_contains "$out" "status: open" "create defaults to open"
@@ -165,6 +164,8 @@ if [[ ${#ID} -eq 8 ]]; then
 else
 	fail "id is 8-char hex" "got '$ID'"
 fi
+assert_contains "$out" "T$ID" "create prints the id as T<hex>"
+assert_not_contains "$out" "TODO-" "create does not print the old TODO- prefix"
 
 # Ask the CLI where the file is rather than composing the path, so these
 # assertions survive the next change to the filename scheme.
@@ -185,12 +186,12 @@ assert_contains "$(cat "$FILE")" "## Description" "body has Description subheadi
 
 section "create (--json shape)"
 out="$(pearls create "Second task" --tag qa --json)"
-# Agent JSON uses the TODO- prefix on id.
-assert_contains "$out" '"id": "TODO-' "json get-shape uses TODO- prefix"
+# Agent JSON carries the same display form as human output.
+assert_contains "$out" '"id": "T' "json get-shape uses the T prefix"
 assert_contains "$out" '"title": "Second task"' "json contains title"
 assert_contains "$out" '"tags": [' "json contains tags array"
 assert_contains "$out" '"status": "open"' "json contains status"
-ID2_PREFIX="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+ID2_PREFIX="$(printf '%s' "$out" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 [[ ${#ID2_PREFIX} -eq 8 ]] && pass "second id parsed ($ID2_PREFIX)" || fail "second id parsed"
 
 section "list (human)"
@@ -226,7 +227,7 @@ assert_contains "$out" '"title": "Wibble widget"' "search --json wraps matches i
 assert_contains "$out" '"open": [' "search --json uses list shape"
 
 # Close the wibble todo so we can test --closed behaviour.
-WID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+WID="$(printf '%s' "$out" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 pearls close "TODO-$WID" >/dev/null
 
 out="$(pearls search -f wibble)"
@@ -249,16 +250,16 @@ section "search (priority + child-of)"
 # Build a small fixture: parent with two children at different priorities,
 # plus an unrelated priority-0 todo.
 PARENT_OUT="$(pearls create "Parent task" --json)"
-PARENT_ID="$(printf '%s' "$PARENT_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+PARENT_ID="$(printf '%s' "$PARENT_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 CHILD_A_OUT="$(pearls create "Child A" --priority 0 --parent "TODO-$PARENT_ID" --json)"
-CHILD_A_ID="$(printf '%s' "$CHILD_A_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+CHILD_A_ID="$(printf '%s' "$CHILD_A_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 CHILD_B_OUT="$(pearls create "Child B" --priority 3 --parent "TODO-$PARENT_ID" --json)"
-CHILD_B_ID="$(printf '%s' "$CHILD_B_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+CHILD_B_ID="$(printf '%s' "$CHILD_B_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 UNRELATED_OUT="$(pearls create "Unrelated p0" --priority 0 --json)"
-UNRELATED_ID="$(printf '%s' "$UNRELATED_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+UNRELATED_ID="$(printf '%s' "$UNRELATED_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 # -p filters by priority exactly.
 out="$(pearls search -p 0)"
@@ -307,15 +308,15 @@ section "list ordering by priority"
 # Build three todos at priorities 4, 0, and 2 in creation order; the list
 # should re-order them ascending (0, 2, 4).
 P4_OUT="$(pearls create "Prio four" --priority 4 --json)"
-P4_ID="$(printf '%s' "$P4_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+P4_ID="$(printf '%s' "$P4_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 P0_OUT="$(pearls create "Prio zero" --priority 0 --json)"
-P0_ID="$(printf '%s' "$P0_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+P0_ID="$(printf '%s' "$P0_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 P2_OUT="$(pearls create "Prio two" --priority 2 --json)"
-P2_ID="$(printf '%s' "$P2_OUT" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+P2_ID="$(printf '%s' "$P2_OUT" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 out="$(pearls list)"
 # Within the open section, expect 0 < 2 < 4.
-order="$(printf '%s\n' "$out" | awk '/^  TODO-/ { print }' | grep -oE 'Prio (zero|two|four)' | tr '\n' '|')"
+order="$(printf '%s\n' "$out" | awk '/^  T[0-9a-f]{8}/ { print }' | grep -oE 'Prio (zero|two|four)' | tr '\n' '|')"
 assert_eq "$order" "Prio zero|Prio two|Prio four|" "list orders open todos by priority asc"
 
 # Priority marker appears between the id and the title.
@@ -339,7 +340,7 @@ pearls delete "TODO-$P4_ID" >/dev/null
 
 section "get / show / path"
 out="$(pearls get "TODO-$ID")"
-assert_contains "$out" "TODO-$ID" "get finds by TODO-<hex>"
+assert_contains "$out" "T$ID" "get finds by TODO-<hex> (legacy input)"
 assert_contains "$out" "Initial body." "get prints body"
 
 out="$(pearls show "$ID")"
@@ -366,7 +367,7 @@ section "priority + parent fields"
 out="$(pearls create "Child task" --priority 2 --parent "TODO-$ID" --json)"
 assert_contains "$out" '"priority": 2' "create stores priority in JSON output"
 assert_contains "$out" "\"parent\": \"$ID\"" "create stores parent in JSON output"
-CHILD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+CHILD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 [[ ${#CHILD_ID} -eq 8 ]] && pass "child id parsed ($CHILD_ID)" || fail "child id parsed"
 
 CHILD_FILE="$(pearls path "$CHILD_ID")"
@@ -376,7 +377,7 @@ assert_contains "$(cat "$CHILD_FILE")" "\"parent\": \"$ID\"" "front matter conta
 # Human output renders both new fields.
 out="$(pearls get "TODO-$CHILD_ID")"
 assert_contains "$out" "priority: 2" "get prints priority"
-assert_contains "$out" "parent: TODO-$ID" "get prints parent in TODO- form"
+assert_contains "$out" "parent: T$ID" "get prints parent in T<hex> form"
 
 # Update can change priority + parent.
 out="$(pearls update "TODO-$CHILD_ID" --priority 0 --json)"
@@ -471,7 +472,7 @@ assert_eq "$alt_md_count" "1" "--todo-dir wrote exactly one .md into alt directo
 
 section "delete"
 out="$(pearls delete "TODO-$ID")"
-assert_contains "$out" "Deleted TODO-$ID" "delete prints confirmation"
+assert_contains "$out" "Deleted T$ID" "delete prints confirmation"
 [[ ! -f "$FILE" ]] && pass "file removed on delete" || fail "file removed on delete"
 assert_status 1 "delete of missing errors" pearls delete "TODO-$ID"
 
@@ -485,17 +486,17 @@ out="$(pearls -h)"
 assert_contains "$out" "pearls — agent-friendly todos" "-h prints help"
 
 # -q suppresses output on delete
-RT_ID="$(pearls create 'Quiet test' --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+RT_ID="$(pearls create 'Quiet test' --json | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 out="$(pearls delete "TODO-$RT_ID" -q)"
 assert_eq "$out" "" "-q suppresses delete output"
 
 # Command aliases: new/add for create, edit for update, rm for delete, show for get
-RT_ID="$(pearls new 'Alias new' --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+RT_ID="$(pearls new 'Alias new' --json | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 [[ ${#RT_ID} -eq 8 ]] && pass "'new' alias creates todo" || fail "'new' alias creates todo"
 
 out="$(pearls add 'Alias add' --json)"
 assert_contains "$out" '"title": "Alias add"' "'add' alias creates todo"
-ADD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+ADD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 out="$(pearls edit "TODO-$RT_ID" --title 'Updated via edit' --json)"
 assert_contains "$out" '"title": "Updated via edit"' "'edit' alias updates todo"
@@ -507,23 +508,27 @@ pearls rm "TODO-$ADD_ID" >/dev/null
 [[ ! -f "$WORK/todos/$ADD_ID.md" ]] && pass "'rm' alias deletes todo" || fail "'rm' alias deletes todo"
 
 # --tag=key inline syntax
-RT_ID="$(pearls create 'Tag eq test' --tag=eqtag --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+RT_ID="$(pearls create 'Tag eq test' --tag=eqtag --json | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 out="$(pearls get "TODO-$RT_ID" --json)"
 assert_contains "$out" '"eqtag"' "--tag=value syntax accepted"
 pearls delete "TODO-$RT_ID" >/dev/null
 
 # --title flag (instead of positional)
-RT_ID="$(pearls create --title 'Title from flag' --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+RT_ID="$(pearls create --title 'Title from flag' --json | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 out="$(pearls get "TODO-$RT_ID" --json)"
 assert_contains "$out" '"title": "Title from flag"' "--title flag works for create"
 pearls delete "TODO-$RT_ID" >/dev/null
 
 # --type memory
-RT_ID="$(pearls create 'A memory' --type memory --json | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+RT_ID="$(pearls create 'A memory' --type memory --json | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 out="$(pearls get "TODO-$RT_ID" --json)"
 assert_contains "$out" '"type": "memory"' "--type memory sets type field"
 assert_eq "$(basename "$(pearls path "$RT_ID")")" "M$RT_ID-a-memory.md" \
 	"memory filename uses the M prefix"
+assert_contains "$(pearls get "$RT_ID")" "M$RT_ID" "memory id displays with the M prefix"
+assert_contains "$(pearls get "M$RT_ID")" "M$RT_ID" "M<hex> is accepted as input"
+assert_contains "$(pearls get "T$RT_ID")" "M$RT_ID" "the wrong letter still resolves by hex"
+assert_contains "$(pearls get "TODO-$RT_ID")" "M$RT_ID" "legacy TODO-<hex> input still resolves"
 pearls delete "TODO-$RT_ID" >/dev/null
 
 # Unknown short flag errors
@@ -533,7 +538,7 @@ assert_status 2 "unknown short flag errors" pearls -Z list
 assert_status 2 "unknown command errors" pearls nope
 
 # -- separator stops flag parsing
-RT_ID="$(pearls create --json -- --leading-dash-title | sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+RT_ID="$(pearls create --json -- --leading-dash-title | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 [[ -n "$RT_ID" ]] && pass "create accepts -- separator" || fail "create accepts -- separator"
 pearls delete "TODO-$RT_ID" >/dev/null
 
@@ -541,11 +546,11 @@ section "create → list → get JSON round-trip"
 # Create a fully-populated todo, then verify every field survives the
 # round trip through list --json and get --json unchanged.
 RT_ID="$(pearls create 'Round-trip task' --tag rt1 --tag rt2 --priority 1 --body 'RT body text' --json \
-	| sed -n 's/.*"id": "TODO-\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
+	| sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/p' | head -1)"
 
 # Verify the create --json payload has all fields.
 CREATE_JSON="$(pearls get "TODO-$RT_ID" --json)"
-assert_contains "$CREATE_JSON" '"id": "TODO-' "round-trip: id present"
+assert_contains "$CREATE_JSON" '"id": "T' "round-trip: id present"
 assert_contains "$CREATE_JSON" '"title": "Round-trip task"' "round-trip: title matches"
 assert_contains "$CREATE_JSON" '"rt1"' "round-trip: tag rt1 present"
 assert_contains "$CREATE_JSON" '"rt2"' "round-trip: tag rt2 present"
@@ -615,7 +620,7 @@ assert_contains "$out" "Child gets closed" "list-all shows the closed child"
 # as a flat entry in the closed section.
 kid_lines="$(printf '%s\n' "$out" | grep -c 'Child gets closed' || true)"
 assert_eq "$kid_lines" "1" "list-all shows the closed child exactly once"
-assert_contains "$out" "── TODO-$KID_SHUT" "closed child is rendered nested"
+assert_contains "$out" "── T$KID_SHUT" "closed child is rendered nested"
 
 # A closed child of a closed parent still nests, inside the closed section.
 SHUT_EPIC="$(pearls create 'Epic that gets closed' | extract_id)"
@@ -623,7 +628,7 @@ SHUT_KID="$(pearls create 'Kid of closed epic' --parent "$SHUT_EPIC" | extract_i
 pearls close "$SHUT_KID" >/dev/null
 pearls close "$SHUT_EPIC" >/dev/null
 out="$(pearls list-all)"
-assert_contains "$out" "── TODO-$SHUT_KID" "closed child nests under a closed parent"
+assert_contains "$out" "── T$SHUT_KID" "closed child nests under a closed parent"
 kid_lines="$(printf '%s\n' "$out" | grep -c 'Kid of closed epic' || true)"
 assert_eq "$kid_lines" "1" "closed child of a closed parent appears once"
 pearls delete "$SHUT_KID" >/dev/null

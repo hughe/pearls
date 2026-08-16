@@ -45,7 +45,8 @@ export interface CliExtensionContextLike {
 
 type ResultOrError<T> = T | { error: string };
 
-export const formatTodoId: (id: string) => string = todo.formatTodoId;
+export const formatTodoId: (id: string, type?: TodoType) => string =
+	todo.formatTodoId;
 export const validateTodoId: (
 	id: string,
 ) => { id: string } | { error: string } = todo.validateTodoId;

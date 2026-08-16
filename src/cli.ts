@@ -243,7 +243,7 @@ function getParent(
 	const v = flags.parent;
 	if (v === undefined) return undefined;
 	if (typeof v !== "string") {
-		throw new CliError("--parent requires a TODO-<hex> id");
+		throw new CliError("--parent requires a T<hex> id");
 	}
 	const trimmed = v.trim();
 	if (!trimmed) return null;
@@ -303,7 +303,7 @@ function printHumanTodo(todo: TodoRecord): void {
 		? ` (assigned: ${todo.assigned_to_session})`
 		: "";
 	process.stdout.write(
-		`${formatTodoId(todo.id)} ${todo.title || "(untitled)"}${tagText}${assignText}\n`,
+		`${formatTodoId(todo.id, todo.type)} ${todo.title || "(untitled)"}${tagText}${assignText}\n`,
 	);
 	process.stdout.write(`status: ${todo.status || "open"}\n`);
 	process.stdout.write(`priority: ${todo.priority !== undefined ? todo.priority : "?"}\n`);
@@ -362,11 +362,12 @@ COMMANDS
                            -p, --priority <0-4>    Exact priority match.
                            -c, --child-of <id>     Only todos whose parent
                                                     field equals <id>.
-                         Prints one line per match: 'TODO-<id>  <title>'.
+                         Prints one line per match: 'T<id>  <title>'.
                          Closed todos are excluded unless --closed is
                          passed. Use --json for the same shape as
                          list --json.
-  get <id>               Print a single todo (id may be TODO-<hex> or <hex>).
+  get <id>               Print a single todo (id may be T<hex>, M<hex> or
+                         the bare <hex>; TODO-<hex> is still accepted).
   show <id>              Alias for get.
   create <title...>      Create a new todo. Flags: --tag <t> (repeatable),
                          --status <s>, --body <text>, --body-file <file>,
@@ -420,9 +421,9 @@ EXAMPLES
   pearls search -f readme              # open/assigned todos mentioning "readme"
   pearls search -f readme --closed     # include closed ones too
   pearls search -p 0                   # only priority-0 todos
-  pearls search -c TODO-deadbeef       # children of TODO-deadbeef
-  pearls append TODO-deadbeef --stdin-body < notes.md
-  pearls close TODO-deadbeef
+  pearls search -c Tdeadbeef           # children of Tdeadbeef
+  pearls append Tdeadbeef --stdin-body < notes.md
+  pearls close Tdeadbeef
   pearls create "Long title here" --slug short-name
   pearls migrate-filenames --dry-run
   PI_TODO_PATH=./todos pearls list
@@ -444,17 +445,17 @@ THE TYPICAL LOOP
      up something already assigned to your own session.
 
   2. Claim it so other agents don't double up:
-       pearls claim TODO-<id> --session "$AGENT_ID"
+       pearls claim T<id> --session "$AGENT_ID"
      Use a stable session id per agent run; pearls also reads
      $PEARLS_SESSION. Add --force to steal a stale claim.
 
   3. Do the work. Record progress as you go:
-       pearls append TODO-<id> --stdin-body <<'EOF'
+       pearls append T<id> --stdin-body <<'EOF'
        Tried X, hit Y, switching to Z.
        EOF
 
   4. Finish:
-       pearls close TODO-<id>
+       pearls close T<id>
      close clears the assignment automatically.
 
 CREATING WORK
@@ -469,16 +470,18 @@ CREATING WORK
   (check 'pearls list --json' to see existing tags).
 
 INSPECTING / SEARCHING
-  pearls get TODO-<id>            # full body
+  pearls get T<id>                # full body
   pearls search -f <query>        # fuzzy match across id/title/tags/status
   pearls search -f <query> --closed  # include closed todos
   pearls search -p 0              # priority 0 todos
-  pearls search -c TODO-<id>      # children of <id>
+  pearls search -c T<id>          # children of <id>
   pearls list-all                 # everything, including closed
 
 IDS AND FILENAMES
-  Ids are written as TODO-<hex> in output, but every command also accepts
-  the bare <hex>. Copy-paste either form.
+  Ids are written as T<hex> for todos and M<hex> for memories — the same
+  letter the file on disk carries. Every command also accepts the bare
+  <hex>, the other letter, and the older TODO-<hex> form, so any id you
+  have lying around still works.
 
   On disk a todo is T<hex>-<slug>.md and a memory is M<hex>-<slug>.md. The
   hex is the id and is what every command resolves; the letter follows the
@@ -684,7 +687,7 @@ async function cmdSearch(run: RunContext): Promise<void> {
 		const v = run.flags["child-of"];
 		if (v === undefined) return undefined;
 		if (typeof v !== "string" || !v.trim()) {
-			throw new CliError("--child-of requires a TODO-<hex> id");
+			throw new CliError("--child-of requires a T<hex> id");
 		}
 		const validated = validateTodoId(v);
 		if ("error" in validated) {
@@ -740,7 +743,7 @@ async function cmdSearch(run: RunContext): Promise<void> {
 	for (const todo of matches) {
 		const pri = todo.priority !== undefined ? `[P${todo.priority}] ` : "[P?] ";
 		process.stdout.write(
-			`${formatTodoId(todo.id)}  ${pri}${todo.title || "(untitled)"}\n`,
+			`${formatTodoId(todo.id, todo.type)}  ${pri}${todo.title || "(untitled)"}\n`,
 		);
 	}
 }
@@ -929,7 +932,11 @@ async function cmdReslug(run: RunContext): Promise<void> {
 	const { todo, path: newPath } = result as { todo: TodoRecord; path: string };
 	if (run.json) {
 		process.stdout.write(
-			JSON.stringify({ id: formatTodoId(todo.id), slug: todo.slug, path: path.resolve(newPath) }) + "\n",
+			JSON.stringify({
+				id: formatTodoId(todo.id, todo.type),
+				slug: todo.slug,
+				path: path.resolve(newPath),
+			}) + "\n",
 		);
 	} else if (!run.flags.quiet) {
 		process.stdout.write(path.resolve(newPath) + "\n");
@@ -974,7 +981,7 @@ async function cmdDelete(run: RunContext): Promise<void> {
 
 	if (run.json) printJsonTodo(result as TodoRecord);
 	else if (!run.flags.quiet) {
-		process.stdout.write(`Deleted ${formatTodoId(id)}\n`);
+		process.stdout.write(`Deleted ${formatTodoId(id, (result as TodoRecord).type)}\n`);
 	}
 }
 
@@ -1037,14 +1044,14 @@ async function cmdSummarizeMemories(run: RunContext): Promise<void> {
 	}
 
 	if (run.json) {
-		const entries = memories.map((m) => ({ id: formatTodoId(m.id), title: m.title }));
+		const entries = memories.map((m) => ({ id: formatTodoId(m.id, m.type), title: m.title }));
 		process.stdout.write(JSON.stringify(entries, null, 2) + "\n");
 	} else {
 		if (memories.length === 0) {
 			return;
 		}
 		for (const m of memories) {
-			process.stdout.write(`${formatTodoId(m.id)} ${m.title || "(untitled)"}\n`);
+			process.stdout.write(`${formatTodoId(m.id, m.type)} ${m.title || "(untitled)"}\n`);
 		}
 	}
 }
@@ -1059,14 +1066,14 @@ async function cmdRefine(run: RunContext): Promise<void> {
 
 	const title = todo.title || "(untitled)";
 	const prompt =
-		`Let's refine task ${formatTodoId(id)} "${title}": ` +
+		`Let's refine task ${formatTodoId(id, todo.type)} "${title}": ` +
 		"Ask me for the missing details needed to refine the todo together. " +
 		"Do not rewrite the todo yet and do not make assumptions. " +
 		"Ask clear, concrete questions and wait for my answers before drafting any structured description.";
 
 	if (run.json) {
 		process.stdout.write(
-			JSON.stringify({ id: formatTodoId(id), title, refine_prompt: prompt }) + "\n",
+			JSON.stringify({ id: formatTodoId(id, todo.type), title, refine_prompt: prompt }) + "\n",
 		);
 	} else {
 		process.stdout.write(prompt + "\n");

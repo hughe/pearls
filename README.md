@@ -58,22 +58,22 @@ pearls list                                    # human output
 pearls list --json                             # machine-readable (matches Pi tool output)
 pearls search readme                           # fuzzy-search open todos
 pearls search readme --closed                  # include closed todos in results
-pearls get TODO-deadbeef                       # show one
+pearls get Tdeadbeef                           # show one
 pearls create "A long title" --slug short      # choose the filename slug
 pearls migrate-filenames --dry-run             # preview <id>.md renames
-pearls append TODO-deadbeef --stdin-body < notes.md
-pearls close TODO-deadbeef                     # shortcut for --status closed
-pearls claim TODO-deadbeef --session mysession # --force to steal
+pearls append Tdeadbeef --stdin-body < notes.md
+pearls close Tdeadbeef                         # shortcut for --status closed
+pearls claim Tdeadbeef --session mysession     # --force to steal
 ```
 
 For an agent that isn't Pi, the typical loop is:
 
 ```sh
 pearls list --json                             # decide what to work on
-pearls claim TODO-deadbeef --session $AGENT_ID # avoid double-work
+pearls claim Tdeadbeef --session $AGENT_ID     # avoid double-work
 # …do the work…
-pearls append TODO-deadbeef --stdin-body       # record progress
-pearls close TODO-deadbeef                     # done
+pearls append Tdeadbeef --stdin-body           # record progress
+pearls close Tdeadbeef                         # done
 ```
 
 Global flags:
@@ -101,7 +101,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 | ----------------------- | -------------------------------------------------------------------- |
 | `list`                  | Open + assigned todos (default). Closed todos are hidden at every level of the tree, children of an epic included. |
 | `list-all`              | Includes closed. A closed child is shown nested under its epic, not repeated as a flat entry. `--archived` also includes the archive. |
-| `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `TODO-<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
+| `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `T<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
 | `get <id>` / `show <id>`| Single todo, body included.                                          |
 | `create <title…>`       | `--tag` (repeatable), `--status`, `--body`, `--body-file`, `--stdin-body`, `--slug` (filename slug; defaults to the title). |
 | `update <id>`           | Same body sources, plus `--title`, `--status`, `--tag` (replaces), `--slug` (renames the file). |
@@ -117,8 +117,9 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 
-Ids may be written as `TODO-<hex>` or the raw `<hex>`; both are accepted
-everywhere, matching the Pi `pearls` tool.
+Ids are displayed as `T<hex>` for todos and `M<hex>` for memories, matching
+the letter on the file. Input is forgiving: the bare `<hex>`, either letter,
+and the older `TODO-<hex>` form are all accepted everywhere.
 
 Renaming a pearl file by hand is safe as long as the `T<hex>-` / `M<hex>-`
 prefix survives — that hex is the id, and the letter and slug are only

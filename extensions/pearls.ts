@@ -59,7 +59,10 @@ const TODO_DIR_NAME = ".pi/todos";
 const TODO_PATH_ENV = "PI_TODO_PATH"; // deprecated
 const PEARLS_DIR_ENV = "PEARLS_DIR";
 const TODO_SETTINGS_NAME = "settings.json";
-const TODO_ID_PREFIX = "TODO-";
+// Ids are displayed as T<hex> for todos and M<hex> for memories, matching
+// the filename prefix. TODO-<hex> was the old display form and is still
+// accepted as input, as is the bare hex.
+const LEGACY_TODO_ID_PREFIX = "TODO-";
 const TODO_ID_PATTERN = /^[a-f0-9]{8}$/i;
 // Files are named T<hex>-<slug>.md, or M<hex>-<slug>.md for memories, so a
 // directory listing separates the backlog from remembered context at a
@@ -190,8 +193,9 @@ type TodoToolDetails =
 			error?: string;
 		};
 
-export function formatTodoId(id: string): string {
-	return `${TODO_ID_PREFIX}${id}`;
+export function formatTodoId(id: string, type?: TodoType): string {
+	const prefix = type === "memory" ? MEMORY_FILE_PREFIX : TODO_FILE_PREFIX;
+	return `${prefix}${id}`;
 }
 
 function normalizeTodoId(id: string): string {
@@ -199,16 +203,24 @@ function normalizeTodoId(id: string): string {
 	if (trimmed.startsWith("#")) {
 		trimmed = trimmed.slice(1);
 	}
-	if (trimmed.toUpperCase().startsWith(TODO_ID_PREFIX)) {
-		trimmed = trimmed.slice(TODO_ID_PREFIX.length);
+	if (trimmed.toUpperCase().startsWith(LEGACY_TODO_ID_PREFIX)) {
+		return trimmed.slice(LEGACY_TODO_ID_PREFIX.length);
 	}
+	// T<hex> / M<hex> as displayed, and as the filename reads. Neither letter
+	// is a hex digit, so this can't shorten a bare id by mistake.
+	const prefixed = /^([TM])([a-f0-9]{8})$/i.exec(trimmed);
+	if (prefixed) return prefixed[2]!;
 	return trimmed;
+}
+
+function displayTodoIdFor(todo: TodoFrontMatter): string {
+	return formatTodoId(todo.id, todo.type);
 }
 
 export function validateTodoId(id: string): { id: string } | { error: string } {
 	const normalized = normalizeTodoId(id);
 	if (!normalized || !TODO_ID_PATTERN.test(normalized)) {
-		return { error: "Invalid todo id. Expected TODO-<hex>." };
+		return { error: "Invalid todo id. Expected T<hex> or M<hex>." };
 	}
 	return { id: normalized.toLowerCase() };
 }
@@ -249,7 +261,7 @@ function sortTodos(todos: TodoFrontMatter[]): TodoFrontMatter[] {
 function buildTodoSearchText(todo: TodoFrontMatter): string {
 	const tags = todo.tags.join(" ");
 	const assignment = todo.assigned_to_session ? `assigned:${todo.assigned_to_session}` : "";
-	return `${formatTodoId(todo.id)} ${todo.id} ${todo.title} ${tags} ${todo.status} ${assignment}`.trim();
+	return `${displayTodoIdFor(todo)} ${todo.id} ${todo.title} ${tags} ${todo.status} ${assignment}`.trim();
 }
 
 export function filterTodos(todos: TodoFrontMatter[], query: string): TodoFrontMatter[] {
@@ -467,7 +479,7 @@ class TodoSelectorComponent extends Container implements Focusable {
 			const line =
 				selectPrefix +
 				this.theme.fg("dim", treePrefix) +
-				this.theme.fg("accent", formatTodoId(todo.id)) +
+				this.theme.fg("accent", displayTodoIdFor(todo)) +
 				" " +
 				this.theme.fg(priColor, priLabel) +
 				" " +
@@ -580,7 +592,7 @@ class TodoActionMenuComponent extends Container {
 			new Text(
 				theme.fg(
 					"accent",
-					theme.bold(`Actions for ${formatTodoId(todo.id)} "${title}"`),
+					theme.bold(`Actions for ${displayTodoIdFor(todo)} "${title}"`),
 				),
 			),
 		);
@@ -765,7 +777,7 @@ class TodoDetailOverlayComponent {
 	private buildTitleLine(width: number): string {
 		const titleText = this.todo.title
 			? ` ${this.todo.title} `
-			: ` Todo ${formatTodoId(this.todo.id)} `;
+			: ` Todo ${displayTodoIdFor(this.todo)} `;
 		const titleWidth = visibleWidth(titleText);
 		if (titleWidth >= width) {
 			return truncateToWidth(this.theme.fg("accent", titleText.trim()), width);
@@ -786,7 +798,7 @@ class TodoDetailOverlayComponent {
 		const priLabel = this.todo.priority !== undefined ? `P${this.todo.priority}` : "P?";
 		const priColor = this.todo.priority !== undefined ? "muted" : "dim";
 		const line =
-			this.theme.fg("accent", formatTodoId(this.todo.id)) +
+			this.theme.fg("accent", displayTodoIdFor(this.todo)) +
 			this.theme.fg("muted", " • ") +
 			this.theme.fg(priColor, priLabel) +
 			this.theme.fg("muted", " • ") +
@@ -1637,7 +1649,7 @@ function renderTreeLines(
 function formatTodoHeading(todo: TodoFrontMatter): string {
 	const tagText = todo.tags.length ? ` [${todo.tags.join(", ")}]` : "";
 	const status = ` (${getTodoStatus(todo)})`;
-	return `${formatTodoId(todo.id)}${formatPriorityTag(todo)} ${getTodoTitle(todo)}${tagText}${formatAssignmentSuffix(todo)}${status}`;
+	return `${displayTodoIdFor(todo)}${formatPriorityTag(todo)} ${getTodoTitle(todo)}${tagText}${formatAssignmentSuffix(todo)}${status}`;
 }
 
 function buildRefinePrompt(todoId: string, title: string): string {
@@ -1714,13 +1726,13 @@ export function formatTodoList(
 }
 
 export function serializeTodoForAgent(todo: TodoRecord): string {
-	const payload = { ...todo, id: formatTodoId(todo.id) };
+	const payload = { ...todo, id: displayTodoIdFor(todo) };
 	return JSON.stringify(payload, null, 2);
 }
 
 export function serializeTodoListForAgent(todos: TodoFrontMatter[]): string {
 	const { assignedTodos, openTodos, closedTodos } = splitTodosByAssignment(todos);
-	const mapTodo = (todo: TodoFrontMatter) => ({ ...todo, id: formatTodoId(todo.id) });
+	const mapTodo = (todo: TodoFrontMatter) => ({ ...todo, id: displayTodoIdFor(todo) });
 	return JSON.stringify(
 		{
 			assigned: assignedTodos.map(mapTodo),
@@ -1742,7 +1754,7 @@ function renderTodoHeading(theme: Theme, todo: TodoFrontMatter, currentSessionId
 	const tagText = todo.tags.length ? theme.fg("dim", ` [${todo.tags.join(", ")}]`) : "";
 	const assignmentText = renderAssignmentSuffix(theme, todo, currentSessionId);
 	return (
-		theme.fg("accent", formatTodoId(todo.id)) +
+		theme.fg("accent", displayTodoIdFor(todo)) +
 		priorityText +
 		" " +
 		theme.fg(titleColor, getTodoTitle(todo)) +
@@ -2005,7 +2017,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 		}
 		const openMemories = allTodos.filter((t) => t.type === "memory" && !isTodoClosed(t.status));
 		if (openMemories.length === 0) return null;
-		const lines = openMemories.map((m) => `${formatTodoId(m.id)} ${m.title || "(untitled)"}`);
+		const lines = openMemories.map((m) => `${displayTodoIdFor(m)} ${m.title || "(untitled)"}`);
 		return `## Pearl Memories\n\nYou have the following memories. Use the pearls tool with action "get" and the ID to retrieve the full body if needed.\n\n${lines.join("\n")}`;
 	};
 
@@ -2495,7 +2507,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						body: `# ${title}\n\n## Description\n\n${searchTerm}\n`,
 					};
 					await writeTodoFile(filePath, todo);
-					console.log(`Created memory ${formatTodoId(id)}`);
+					console.log(`Created memory ${formatTodoId(id, "memory")}`);
 					return;
 				}
 
@@ -2526,7 +2538,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 							body: `# ${title}\n\n## Description\n\n${text}\n`,
 						};
 						await writeTodoFile(filePath, todo);
-						ctx.ui.notify(`Created memory ${formatTodoId(id)}`, "info");
+						ctx.ui.notify(`Created memory ${formatTodoId(id, "memory")}`, "info");
 						done();
 					};
 
@@ -2670,7 +2682,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					const filePath = getTodoPath(todosDir, todo.id);
 					const record = await ensureTodoExists(filePath, todo.id);
 					if (!record) {
-						ctx.ui.notify(`Todo ${formatTodoId(todo.id)} not found`, "error");
+						ctx.ui.notify(`Todo ${displayTodoIdFor(todo)} not found`, "error");
 						return null;
 					}
 					return record;
@@ -2707,7 +2719,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					}
 					if (action === "work") {
 						const title = record.title || "(untitled)";
-						nextPrompt = `work on todo ${formatTodoId(record.id)} "${title}"`;
+						nextPrompt = `work on todo ${displayTodoIdFor(record)} "${title}"`;
 						done();
 						return "exit";
 					}
@@ -2731,7 +2743,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						}
 						const updatedTodos = await listTodos(todosDir);
 						selector?.setTodos(updatedTodos);
-						ctx.ui.notify(`Released todo ${formatTodoId(record.id)}`, "info");
+						ctx.ui.notify(`Released todo ${displayTodoIdFor(record)}`, "info");
 						return "stay";
 					}
 
@@ -2743,7 +2755,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						}
 						const updatedTodos = await listTodos(todosDir);
 						selector?.setTodos(updatedTodos);
-						ctx.ui.notify(`Deleted todo ${formatTodoId(record.id)}`, "info");
+						ctx.ui.notify(`Deleted todo ${displayTodoIdFor(record)}`, "info");
 						return "stay";
 					}
 
@@ -2757,7 +2769,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					const updatedTodos = await listTodos(todosDir);
 					selector?.setTodos(updatedTodos);
 					ctx.ui.notify(
-						`${action === "close" ? "Closed" : "Reopened"} todo ${formatTodoId(record.id)}`,
+						`${action === "close" ? "Closed" : "Reopened"} todo ${displayTodoIdFor(record)}`,
 						"info",
 					);
 					return "stay";
@@ -2777,7 +2789,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 					}
 
 					if (action === "delete") {
-						const message = `Delete todo ${formatTodoId(record.id)}? This cannot be undone.`;
+						const message = `Delete todo ${displayTodoIdFor(record)}? This cannot be undone.`;
 						deleteConfirm = new TodoDeleteConfirmComponent(theme, message, (confirmed) => {
 							if (!confirmed) {
 								setActiveComponent(actionMenu);
@@ -2836,7 +2848,7 @@ export default function todosExtension(pi: ExtensionAPI) {
 						nextPrompt =
 							action === "refine"
 								? buildRefinePrompt(todo.id, title)
-								: `work on todo ${formatTodoId(todo.id)} "${title}"`;
+								: `work on todo ${displayTodoIdFor(todo)} "${title}"`;
 						done();
 					},
 				);
