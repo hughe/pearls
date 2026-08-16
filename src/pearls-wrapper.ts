@@ -120,8 +120,11 @@ export const splitTodosByAssignment: (todos: TodoFrontMatter[]) => {
 	openTodos: TodoFrontMatter[];
 	closedTodos: TodoFrontMatter[];
 } = todo.splitTodosByAssignment;
-export const formatTodoList: (todos: TodoFrontMatter[], allTodos?: TodoFrontMatter[]) => string =
-	todo.formatTodoList;
+export const formatTodoList: (
+	todos: TodoFrontMatter[],
+	allTodos?: TodoFrontMatter[],
+	opts?: { includeClosed?: boolean },
+) => string = todo.formatTodoList;
 export const serializeTodoForAgent: (t: TodoRecord) => string =
 	todo.serializeTodoForAgent;
 export const serializeTodoListForAgent: (

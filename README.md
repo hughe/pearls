@@ -99,7 +99,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 
 | Command                 | Notes                                                                |
 | ----------------------- | -------------------------------------------------------------------- |
-| `list`                  | Open + assigned todos (default).                                     |
+| `list`                  | Open + assigned todos (default). Closed todos are hidden at every level of the tree, children of an epic included. |
 | `list-all`              | Includes closed. `--archived` also includes the archive.             |
 | `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `TODO-<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
 | `get <id>` / `show <id>`| Single todo, body included.                                          |

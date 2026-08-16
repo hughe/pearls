@@ -289,8 +289,12 @@ function printJsonTodo(todo: TodoRecord): void {
 	process.stdout.write(serializeTodoForAgent(todo) + "\n");
 }
 
-function printHumanList(todos: TodoFrontMatter[], allTodos?: TodoFrontMatter[]): void {
-	process.stdout.write(formatTodoList(todos, allTodos) + "\n");
+function printHumanList(
+	todos: TodoFrontMatter[],
+	allTodos?: TodoFrontMatter[],
+	opts?: { includeClosed?: boolean },
+): void {
+	process.stdout.write(formatTodoList(todos, allTodos, opts) + "\n");
 }
 
 function printHumanTodo(todo: TodoRecord): void {
@@ -348,6 +352,8 @@ GLOBAL FLAGS
 
 COMMANDS
   list                   List open + assigned todos (default human output).
+                         Closed todos are hidden whether they are top-level
+                         or children of an epic.
   list-all               List every todo including closed. Add --archived to
                          include todos GC has moved to <todos-dir>/archive.
   search [filters]       Filter todos. At least one of:
@@ -647,7 +653,9 @@ async function cmdList(
 	if (run.json) {
 		printJsonList(listed);
 	} else {
-		printHumanList(listed, todos);
+		// Pass the filter through: `list` hides closed pearls, so it must hide
+		// closed children of an epic too, or the tree contradicts the sections.
+		printHumanList(listed, todos, { includeClosed: opts.includeClosed });
 	}
 }
 

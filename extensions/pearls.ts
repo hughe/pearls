@@ -1519,7 +1519,9 @@ function buildTodoTree(
 	sectionTodos: TodoFrontMatter[],
 	allTodos: TodoFrontMatter[],
 	allTodoIds: Set<string>,
+	opts?: { includeClosedChildren?: boolean },
 ): TodoTreeNode[] {
+	const includeClosedChildren = opts?.includeClosedChildren ?? true;
 	const sectionIds = new Set(sectionTodos.map((t) => t.id));
 	const childrenMap = new Map<string, TodoFrontMatter[]>();
 	const roots: TodoFrontMatter[] = [];
@@ -1537,7 +1539,10 @@ function buildTodoTree(
 
 	// Collect all todos that should appear in this section:
 	//   - todos explicitly in the section
-	//   - closed children of open parents in the section (pulled from allTodos)
+	//   - children of parents in the section that the caller filtered out
+	//     (pulled from allTodos), unless they are closed and the caller is
+	//     hiding closed entries — a listing that hides a closed pearl at the
+	//     top level should hide it under an epic too.
 	const seen = new Set<string>();
 	const enrichedTodos: TodoFrontMatter[] = [];
 	for (const t of sectionTodos) {
@@ -1547,6 +1552,7 @@ function buildTodoTree(
 	// Pull in children from allTodos whose parent is in this section but they aren't
 	for (const t of allTodos) {
 		if (seen.has(t.id)) continue;
+		if (!includeClosedChildren && isTodoClosed(getTodoStatus(t))) continue;
 		if (t.parent && sectionIds.has(t.parent)) {
 			enrichedTodos.push(t);
 			seen.add(t.id);
@@ -1664,9 +1670,18 @@ export function splitTodosByAssignment(todos: TodoFrontMatter[]): {
 	return { assignedTodos, openTodos, closedTodos };
 }
 
-export function formatTodoList(todos: TodoFrontMatter[], allTodos?: TodoFrontMatter[]): string {
+export function formatTodoList(
+	todos: TodoFrontMatter[],
+	allTodos?: TodoFrontMatter[],
+	opts?: { includeClosed?: boolean },
+): string {
 	if (!todos.length) return "No todos.";
 
+	// `allTodos` is the pool the tree is reconstructed from, so it can carry
+	// closed entries even when the caller is listing only open ones. Say
+	// explicitly whether closed entries belong in the output; without this a
+	// closed child reappears under its epic after being filtered out.
+	const includeClosed = opts?.includeClosed ?? true;
 	const all = allTodos ?? todos;
 	const allTodoIds = new Set(all.map((t) => t.id));
 	const { assignedTodos, openTodos, closedTodos } = splitTodosByAssignment(todos);
@@ -1677,7 +1692,9 @@ export function formatTodoList(todos: TodoFrontMatter[], allTodos?: TodoFrontMat
 			lines.push("  none");
 			return;
 		}
-		const tree = buildTodoTree(sectionTodos, all, allTodoIds);
+		const tree = buildTodoTree(sectionTodos, all, allTodoIds, {
+			includeClosedChildren: includeClosed,
+		});
 		renderTreeLines(tree, "  ", lines, (prefix, connector, todo) => {
 			lines.push(`${prefix}${connector}${formatTodoHeading(todo)}`);
 		});

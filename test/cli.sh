@@ -594,6 +594,32 @@ assert_not_contains "$out" '"assigned_to_session"' "round-trip: release clears a
 # Clean up.
 pearls delete "TODO-$RT_ID" >/dev/null
 
+section "closed children of an epic"
+# A closed child must be hidden wherever a closed top-level pearl is
+# hidden: `list` drops both, `list-all` shows both. Before this, the tree
+# pulled closed children back in, so `list` printed "Closed todos (0)"
+# directly above a closed child rendered under its epic.
+EPIC_ID="$(pearls create 'Epic: ship the thing' | extract_id)"
+KID_OPEN="$(pearls create 'Child stays open' --parent "$EPIC_ID" | extract_id)"
+KID_SHUT="$(pearls create 'Child gets closed' --parent "$EPIC_ID" | extract_id)"
+pearls close "$KID_SHUT" >/dev/null
+
+out="$(pearls list)"
+assert_contains "$out" "Epic: ship the thing" "list shows the epic"
+assert_contains "$out" "Child stays open" "list shows the open child"
+assert_not_contains "$out" "Child gets closed" "list hides the closed child"
+
+out="$(pearls list-all)"
+assert_contains "$out" "Child gets closed" "list-all shows the closed child"
+
+# --json already excluded it; assert the two outputs agree.
+out="$(pearls list --json)"
+assert_not_contains "$out" "Child gets closed" "list --json hides the closed child"
+
+pearls delete "$KID_SHUT" >/dev/null
+pearls delete "$KID_OPEN" >/dev/null
+pearls delete "$EPIC_ID" >/dev/null
+
 section "filename slugs"
 # Slug is derived from the title: lowercased, non-alphanumerics collapsed
 # to '-', and only then truncated to 40 chars.
