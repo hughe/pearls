@@ -1686,6 +1686,9 @@ export function formatTodoList(
 	const allTodoIds = new Set(all.map((t) => t.id));
 	const { assignedTodos, openTodos, closedTodos } = splitTodosByAssignment(todos);
 	const lines: string[] = [];
+	// Ids already on screen. A closed child nests under its epic in an
+	// earlier section, and listing it flat again below would show it twice.
+	const rendered = new Set<string>();
 	const pushSection = (label: string, sectionTodos: TodoFrontMatter[]) => {
 		lines.push(`${label} (${sectionTodos.length}):`);
 		if (!sectionTodos.length) {
@@ -1696,13 +1699,17 @@ export function formatTodoList(
 			includeClosedChildren: includeClosed,
 		});
 		renderTreeLines(tree, "  ", lines, (prefix, connector, todo) => {
+			rendered.add(todo.id);
 			lines.push(`${prefix}${connector}${formatTodoHeading(todo)}`);
 		});
 	};
 
 	pushSection("Assigned todos", assignedTodos);
 	pushSection("Open todos", openTodos);
-	pushSection("Closed todos", closedTodos);
+	pushSection(
+		"Closed todos",
+		closedTodos.filter((t) => !rendered.has(t.id)),
+	);
 	return lines.join("\n");
 }
 
@@ -1757,6 +1764,9 @@ function renderTodoList(
 	const allTodoIds = new Set(all.map((t) => t.id));
 	const { assignedTodos, openTodos, closedTodos } = splitTodosByAssignment(todos);
 	const lines: string[] = [];
+	// See formatTodoList: track what is already on screen so a closed child
+	// nested under its epic isn't repeated in the closed section.
+	const rendered = new Set<string>();
 	const pushSection = (label: string, sectionTodos: TodoFrontMatter[]) => {
 		lines.push(theme.fg("muted", `${label} (${sectionTodos.length})`));
 		if (!sectionTodos.length) {
@@ -1769,6 +1779,9 @@ function renderTodoList(
 		renderTreeLines(tree, "  ", lines, (prefix, connector, todo) => {
 			count += 1;
 			if (count > maxItems) return; // skip rendering beyond max
+			// Only what actually made it past the collapse limit counts as
+			// shown; a truncated child still deserves its closed-section line.
+			rendered.add(todo.id);
 			const treePrefix = prefix + theme.fg("dim", connector);
 			lines.push(`${treePrefix}${renderTodoHeading(theme, todo, currentSessionId)}`);
 		});
@@ -1777,15 +1790,17 @@ function renderTodoList(
 		}
 	};
 
-	const sections: Array<{ label: string; todos: TodoFrontMatter[] }> = [
-		{ label: "Assigned todos", todos: assignedTodos },
-		{ label: "Open todos", todos: openTodos },
-		{ label: "Closed todos", todos: closedTodos },
+	// Rendered in order, so the closed section can be filtered against what
+	// the assigned/open sections already showed.
+	const sections: Array<{ label: string; todos: () => TodoFrontMatter[] }> = [
+		{ label: "Assigned todos", todos: () => assignedTodos },
+		{ label: "Open todos", todos: () => openTodos },
+		{ label: "Closed todos", todos: () => closedTodos.filter((t) => !rendered.has(t.id)) },
 	];
 
 	sections.forEach((section, index) => {
 		if (index > 0) lines.push("");
-		pushSection(section.label, section.todos);
+		pushSection(section.label, section.todos());
 	});
 
 	return lines.join("\n");

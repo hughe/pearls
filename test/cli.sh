@@ -611,6 +611,23 @@ assert_not_contains "$out" "Child gets closed" "list hides the closed child"
 
 out="$(pearls list-all)"
 assert_contains "$out" "Child gets closed" "list-all shows the closed child"
+# Nested under its epic, and only there — it used to appear a second time
+# as a flat entry in the closed section.
+kid_lines="$(printf '%s\n' "$out" | grep -c 'Child gets closed' || true)"
+assert_eq "$kid_lines" "1" "list-all shows the closed child exactly once"
+assert_contains "$out" "── TODO-$KID_SHUT" "closed child is rendered nested"
+
+# A closed child of a closed parent still nests, inside the closed section.
+SHUT_EPIC="$(pearls create 'Epic that gets closed' | extract_id)"
+SHUT_KID="$(pearls create 'Kid of closed epic' --parent "$SHUT_EPIC" | extract_id)"
+pearls close "$SHUT_KID" >/dev/null
+pearls close "$SHUT_EPIC" >/dev/null
+out="$(pearls list-all)"
+assert_contains "$out" "── TODO-$SHUT_KID" "closed child nests under a closed parent"
+kid_lines="$(printf '%s\n' "$out" | grep -c 'Kid of closed epic' || true)"
+assert_eq "$kid_lines" "1" "closed child of a closed parent appears once"
+pearls delete "$SHUT_KID" >/dev/null
+pearls delete "$SHUT_EPIC" >/dev/null
 
 # --json already excluded it; assert the two outputs agree.
 out="$(pearls list --json)"
