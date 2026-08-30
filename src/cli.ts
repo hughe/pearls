@@ -56,6 +56,15 @@ import {
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { migrateTodoFilenames } from "./migrate-filenames.js";
+import {
+	colorEnabled,
+	colorPearlId,
+	colorPriorityTag,
+	colorPriorityValue,
+	colorizeListOutput,
+	dim,
+	isClosedStatus,
+} from "./colorize.js";
 
 // ---------------------------------------------------------------------------
 // Stub ExtensionContext
@@ -140,6 +149,8 @@ const KNOWN_BOOL_FLAGS = new Set([
 	"no-gc",
 	"dry-run",
 	"archived",
+	"color",
+	"no-color",
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -290,25 +301,53 @@ function printJsonTodo(todo: TodoRecord): void {
 }
 
 function printHumanList(
+	run: RunContext,
 	todos: TodoFrontMatter[],
 	allTodos?: TodoFrontMatter[],
 	opts?: { includeClosed?: boolean },
 ): void {
-	process.stdout.write(formatTodoList(todos, allTodos, opts) + "\n");
+	const text = formatTodoList(todos, allTodos, opts);
+	// Colors only when stdout is a terminal (or forced), so piped output —
+	// the bytes agents parse — is identical to the plain formatter.
+	const out = run.color
+		? colorizeListOutput(text, {
+				currentSessionId: run.ctx.sessionManager.getSessionId(),
+			})
+		: text;
+	process.stdout.write(out + "\n");
 }
 
-function printHumanTodo(todo: TodoRecord): void {
+function printHumanTodo(run: RunContext, todo: TodoRecord): void {
+	const id = formatTodoId(todo.id, todo.type);
+	const title = todo.title || "(untitled)";
 	const tagText = todo.tags.length ? ` [${todo.tags.join(", ")}]` : "";
 	const assignText = todo.assigned_to_session
 		? ` (assigned: ${todo.assigned_to_session})`
 		: "";
+	const status = todo.status || "open";
+	const closed = isClosedStatus(status);
+
+	if (run.color) {
+		// Same palette as the list: yellow id, dim metadata, closed muted.
+		const assignColor =
+				todo.assigned_to_session === run.ctx.sessionManager.getSessionId()
+				? "32"
+				: "2";
+		const assign = todo.assigned_to_session ? `\x1b[${assignColor}m${assignText}\x1b[0m` : "";
+		process.stdout.write(
+				`${colorPearlId(id, closed)} ${closed ? dim(title) : title}${dim(tagText)}${assign}\n`,
+		);
+	} else {
+		process.stdout.write(`${id} ${title}${tagText}${assignText}\n`);
+	}
+	process.stdout.write(`status: ${run.color && closed ? dim(status) : status}\n`);
+	const pri = todo.priority !== undefined ? String(todo.priority) : "?";
 	process.stdout.write(
-		`${formatTodoId(todo.id, todo.type)} ${todo.title || "(untitled)"}${tagText}${assignText}\n`,
+		`priority: ${run.color ? colorPriorityValue(todo.priority, closed) : pri}\n`,
 	);
-	process.stdout.write(`status: ${todo.status || "open"}\n`);
-	process.stdout.write(`priority: ${todo.priority !== undefined ? todo.priority : "?"}\n`);
 	if (todo.parent) {
-		process.stdout.write(`parent: ${formatTodoId(todo.parent)}\n`);
+		const parent = formatTodoId(todo.parent);
+		process.stdout.write(`parent: ${run.color ? colorPearlId(parent) : parent}\n`);
 	}
 	if (todo.created_at) {
 		process.stdout.write(`created: ${todo.created_at}\n`);
@@ -343,6 +382,10 @@ GLOBAL FLAGS
                          $PEARLS_SESSION or cli:<user>@<host>).
   --json                 Emit stable JSON (identical to Pi's todo tool output),
                          suitable for any agent that parses tool results.
+  --color / --no-color  Force colorized output on/off. Default: auto —
+                         colors only when stdout is a terminal, so piped
+                         output is plain. Also honors $NO_COLOR,
+                         $FORCE_COLOR and $CLICOLOR_FORCE.
   --no-gc                Skip the normal startup garbage collection of old
                          closed todos. GC moves them to <todos-dir>/archive
                          rather than deleting them (set "archive": false in
@@ -524,6 +567,7 @@ interface RunContext {
 	todosDir: string;
 	ctx: ReturnType<typeof makeCtx>;
 	json: boolean;
+	color: boolean;
 	flags: Record<string, string | boolean>;
 	positional: string[];
 }
@@ -574,6 +618,14 @@ async function main(argv: string[]): Promise<void> {
 		todosDir,
 		ctx,
 		json: Boolean(parsed.flags.json),
+		color: colorEnabled(
+			parsed.flags["no-color"]
+				? "never"
+				: parsed.flags.color
+					? "always"
+					: "auto",
+			process.stdout,
+		),
 		flags: parsed.flags,
 		positional: parsed.positional,
 	};
@@ -658,7 +710,7 @@ async function cmdList(
 	} else {
 		// Pass the filter through: `list` hides closed pearls, so it must hide
 		// closed children of an epic too, or the tree contradicts the sections.
-		printHumanList(listed, todos, { includeClosed: opts.includeClosed });
+		printHumanList(run, listed, todos, { includeClosed: opts.includeClosed });
 	}
 }
 
@@ -671,7 +723,7 @@ async function cmdMemories(run: RunContext): Promise<void> {
 	if (run.json) {
 		printJsonList(memories);
 	} else {
-		printHumanList(memories, memories);
+		printHumanList(run, memories, memories);
 	}
 }
 
@@ -741,10 +793,19 @@ async function cmdSearch(run: RunContext): Promise<void> {
 	}
 
 	for (const todo of matches) {
+		const id = formatTodoId(todo.id, todo.type);
 		const pri = todo.priority !== undefined ? `[P${todo.priority}] ` : "[P?] ";
-		process.stdout.write(
-			`${formatTodoId(todo.id, todo.type)}  ${pri}${todo.title || "(untitled)"}\n`,
-		);
+		const title = todo.title || "(untitled)";
+		if (run.color) {
+			const closed = isClosedStatus(todo.status);
+			process.stdout.write(
+				`${colorPearlId(id, closed)}  ${colorPriorityTag(todo.priority, closed)} ${
+					closed ? dim(title) : title
+				}\n`,
+			);
+		} else {
+			process.stdout.write(`${id}  ${pri}${title}\n`);
+		}
 	}
 }
 
@@ -766,7 +827,7 @@ async function cmdGet(run: RunContext): Promise<void> {
 	const todo = await ensureTodoExists(filePath, id);
 	if (!todo) fail(`Todo ${formatTodoId(id)} not found`, 1);
 	if (run.json) printJsonTodo(todo);
-	else printHumanTodo(todo);
+	else printHumanTodo(run, todo);
 }
 
 // ---- create ---------------------------------------------------------------
@@ -826,7 +887,7 @@ async function cmdCreate(run: RunContext): Promise<void> {
 	if (typeof result === "object" && "error" in result) fail(result.error);
 
 	if (run.json) printJsonTodo(result as TodoRecord);
-	else printHumanTodo(result as TodoRecord);
+	else printHumanTodo(run, result as TodoRecord);
 }
 
 // ---- update ---------------------------------------------------------------
@@ -886,7 +947,7 @@ async function cmdUpdate(run: RunContext): Promise<void> {
 	if (typeof result === "object" && "error" in result) fail(result.error);
 
 	if (run.json) printJsonTodo(result as TodoRecord);
-	else printHumanTodo(result as TodoRecord);
+	else printHumanTodo(run, result as TodoRecord);
 }
 
 // ---- append ---------------------------------------------------------------
@@ -907,7 +968,7 @@ async function cmdAppend(run: RunContext): Promise<void> {
 	if (typeof result === "object" && "error" in result) fail(result.error);
 
 	if (run.json) printJsonTodo(result as TodoRecord);
-	else printHumanTodo(result as TodoRecord);
+	else printHumanTodo(run, result as TodoRecord);
 }
 
 // ---- reslug ---------------------------------------------------------------
@@ -993,7 +1054,7 @@ async function cmdSetStatus(run: RunContext, status: string): Promise<void> {
 	if (typeof result === "object" && "error" in result) fail(result.error);
 
 	if (run.json) printJsonTodo(result as TodoRecord);
-	else printHumanTodo(result as TodoRecord);
+	else printHumanTodo(run, result as TodoRecord);
 }
 
 // ---- claim / release ------------------------------------------------------
@@ -1009,7 +1070,7 @@ async function cmdClaim(run: RunContext): Promise<void> {
 	if (typeof result === "object" && "error" in result) fail(result.error);
 
 	if (run.json) printJsonTodo(result as TodoRecord);
-	else printHumanTodo(result as TodoRecord);
+	else printHumanTodo(run, result as TodoRecord);
 }
 
 async function cmdRelease(run: RunContext): Promise<void> {
@@ -1023,7 +1084,7 @@ async function cmdRelease(run: RunContext): Promise<void> {
 	if (typeof result === "object" && "error" in result) fail(result.error);
 
 	if (run.json) printJsonTodo(result as TodoRecord);
-	else printHumanTodo(result as TodoRecord);
+	else printHumanTodo(run, result as TodoRecord);
 }
 
 // ---- path -----------------------------------------------------------------
@@ -1051,7 +1112,16 @@ async function cmdSummarizeMemories(run: RunContext): Promise<void> {
 			return;
 		}
 		for (const m of memories) {
-			process.stdout.write(`${formatTodoId(m.id, m.type)} ${m.title || "(untitled)"}\n`);
+			const id = formatTodoId(m.id, m.type);
+			const title = m.title || "(untitled)";
+			if (run.color) {
+				const closed = isClosedStatus(m.status);
+			process.stdout.write(
+				`${colorPearlId(id, closed)} ${closed ? dim(title) : title}\n`,
+			);
+		} else {
+			process.stdout.write(`${id} ${title}\n`);
+		}
 		}
 	}
 }

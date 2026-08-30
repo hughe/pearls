@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Run the pearls in this repo directly — no build, no install.
+# Usage: ./pearls-dev <any pearls command and flags>
+root="$(cd "$(dirname "$0")" && pwd)"
+exec "$root/node_modules/.bin/tsx" "$root/src/cli.ts" "$@"
