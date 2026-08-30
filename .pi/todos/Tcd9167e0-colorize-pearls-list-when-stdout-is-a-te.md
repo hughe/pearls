@@ -18,3 +18,7 @@
 - Applied to `list`, `list-all`, `memories`, `search`, `get`, and `summarize-memories` human output.
 - Colors only when stdout is a TTY, so piped output (agent payload) is byte-identical to plain. Controls: `--color`/`--no-color` flags; `NO_COLOR`, `FORCE_COLOR`, `CLICOLOR_FORCE` env vars.
 - Tests in `test/cli.sh` (colorized output section): no escapes when piped, forced colors present, ANSI-stripped output equals plain, closed dimming, flag precedence. 211/211 passing.
+
+Palette revision: pearl ids changed from yellow to **bold (no color)** — ids stand out by weight, so they can't clash with the priority colors. Closed ids are dim-bold. Tests updated accordingly.
+
+Final palette: ids are **gray** (quiet chrome; tried bold first, user preferred gray). Closed ids are dim-gray.

@@ -8,7 +8,8 @@
  * stays identical to the plain formatter.
  *
  * Palette:
- *   - pearl ids (T<hex> / M<hex>) are yellow so they stand out
+ *   - pearl ids (T<hex> / M<hex>) are gray — quiet chrome; the priority
+ *     colors carry the meaning and the id stays reference material
  *   - priorities get their own color: bold red for P0, cooling down to
  *     blue for P4, dim for the unspecified "[P?]"
  *   - closed pearls are dimmed so live work stands out
@@ -68,9 +69,9 @@ function dimmed(params: string[]): string[] {
 	return params.includes("2") ? params : ["2", ...params];
 }
 
-/** Paint a pearl id (T<hex> / M<hex>) in yellow. */
+/** Paint a pearl id (T<hex> / M<hex>) in gray; ids are quiet chrome. */
 export function colorPearlId(id: string, closed = false): string {
-	return paint(closed ? ["2", "33"] : ["33"], id);
+	return paint(closed ? ["2", "90"] : ["90"], id);
 }
 
 /** Paint "[P<n>]" / "[P?]" with the priority's color. */

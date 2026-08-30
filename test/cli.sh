@@ -348,7 +348,7 @@ assert_not_contains "$out" "$(printf '\033')" "piped list has no ANSI escapes"
 # A fresh P0 fixture (the earlier priority todos were tidied away).
 PID0="$(pearls create 'Colourful fixture' --priority 0 | extract_id)"
 colored="$(FORCE_COLOR=1 pearls list-all)"
-assert_contains "$colored" "$(printf '\033[33m')" "forced color paints ids yellow"
+assert_contains "$colored" "$(printf '\033[90mT')" "forced color grays ids"
 assert_contains "$colored" "$(printf '\033[1;31m [P0]')" "P0 is bold red"
 assert_contains "$colored" "$(printf '\033[2m [P?]')" "unset priority is dim"
 assert_eq "$(printf '%s' "$colored" | sed 's/\x1b\[[0-9;]*m//g')" "$(pearls list-all)" \
@@ -358,13 +358,13 @@ assert_eq "$(printf '%s' "$colored" | sed 's/\x1b\[[0-9;]*m//g')" "$(pearls list
 CID="$(pearls create 'Colour me closed' --priority 2 | extract_id)"
 pearls close "$CID" >/dev/null
 colored="$(FORCE_COLOR=1 pearls list-all)"
-assert_contains "$colored" "$(printf '\033[2;33mT%s' "$CID")" "closed pearl's id is dim yellow"
+assert_contains "$colored" "$(printf '\033[2;90mT%s' "$CID")" "closed pearl's id is dim gray"
 assert_contains "$colored" "$(printf '\033[2;35m [P2]')" "closed pearl's priority is dimmed"
 assert_contains "$colored" "$(printf '\033[2mColour me closed')" "closed pearl's title is dimmed"
 
 # search and get honor colors too.
 colored="$(FORCE_COLOR=1 pearls search -f 'Colour me' --closed)"
-assert_contains "$colored" "$(printf '\033[2;33mT%s' "$CID")" "search dims closed results"
+assert_contains "$colored" "$(printf '\033[2;90mT%s' "$CID")" "search dims closed results"
 colored="$(FORCE_COLOR=1 pearls get "$CID")"
 assert_contains "$colored" "$(printf '\033[2;35m2')" "get paints the priority value"
 assert_contains "$colored" "$(printf 'status: \033[2mclosed')" "get dims a closed status"
@@ -374,7 +374,7 @@ pearls delete "TODO-$CID" >/dev/null
 out="$(FORCE_COLOR=1 pearls list --no-color)"
 assert_not_contains "$out" "$(printf '\033')" "--no-color beats FORCE_COLOR"
 out="$(NO_COLOR=1 pearls list --color)"
-assert_contains "$out" "$(printf '\033[33m')" "--color beats NO_COLOR"
+assert_contains "$out" "$(printf '\033[90mT')" "--color beats NO_COLOR"
 pearls delete "TODO-$PID0" >/dev/null
 
 section "get / show / path"
