@@ -2,9 +2,8 @@
   "id": "cd9167e0",
   "title": "Colorize pearls list when stdout is a terminal",
   "tags": [],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-30T22:20:16.331Z",
-  "assigned_to_session": "01a054c3-63a8-7ea1-8d70-23e6569db3d8",
   "slug": "colorize-pearls-list-when-stdout-is-a-te"
 }
 
