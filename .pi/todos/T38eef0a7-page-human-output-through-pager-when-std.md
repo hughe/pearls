@@ -5,9 +5,8 @@
     "ux",
     "cli"
   ],
-  "status": "open",
+  "status": "closed",
   "created_at": "2026-08-30T23:26:25.398Z",
-  "assigned_to_session": "01a054c3-63a8-7ea1-8d70-23e6569db3d8",
   "priority": 1,
   "slug": "page-human-output-through-pager-when-std"
 }
