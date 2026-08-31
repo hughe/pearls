@@ -592,7 +592,8 @@ async function main(argv: string[]): Promise<void> {
 	// Start the pager before the first byte of human output. JSON and
 	// piped output skip it entirely; when the pager is running, its stdout
 	// is the terminal, so color detection below treats output as a TTY.
-	initPager({ disabled: Boolean(parsed.flags.json) });
+	// --version is a single line — no need to page it (git does the same).
+	initPager({ disabled: Boolean(parsed.flags.json) || Boolean(parsed.flags.version) });
 
 	if (parsed.flags.version) {
 		out(VERSION + "\n");
