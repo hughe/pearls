@@ -2,10 +2,15 @@
  * Pipe human output through $PAGER when stdout is a terminal.
  *
  * Follows git's conventions: the pager is $PEARLS_PAGER, falling back to
- * $PAGER, then "less". When the pager is less and $LESS is unset we pass
- * FRX: R lets colors through, and F+X mean output that fits on one screen
- * never engages the pager at all — it prints inline and less exits. So
- * the pager only appears when the output actually needs it.
+ * $PAGER, then "less". When the pager is less, we ensure LESS contains
+ * the flags needed for git-like behavior:
+ *
+ *   F = quit-if-one-screen (the "only page when needed" feature)
+ *   R = pass raw ANSI escapes (colors survive the pager)
+ *   X = no alternate screen (short output prints inline)
+ *
+ * We add any missing flags to the user's existing LESS configuration
+ * rather than overriding it entirely.
  *
  * Piped output (agents) never sees a pager: stdout isn't a TTY, and
  * --json disables it explicitly. Errors go to stderr unpaged.
@@ -23,8 +28,19 @@ export function initPager(opts: { disabled?: boolean } = {}): void {
 	if (!spec) return; // empty string disables the pager, git-style
 
 	const env = { ...process.env };
-	if (!env.LESS && /(^|[\s/])less([\s]|$)/.test(spec)) {
-		env.LESS = "FRX";
+	// When the pager is less, ensure it has the flags for git-like behavior:
+	// F = quit-if-one-screen (the "only page when needed" feature)
+	// R = pass raw ANSI escapes (colors survive the pager)
+	// X = no alternate screen (short output prints inline)
+	// We add missing flags rather than overriding user preferences.
+	if (/(^|[\s/])less([\s]|$)/.test(spec)) {
+		const lessFlags = env.LESS ?? "";
+		const needed = "FRX";
+		let flags = lessFlags;
+		for (const c of needed) {
+			if (!flags.includes(c)) flags += c;
+		}
+		env.LESS = flags;
 	}
 
 	const child = spawn(spec, {

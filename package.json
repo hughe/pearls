@@ -1,6 +1,6 @@
 {
   "name": "pearls",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Agent-friendly to-do list manager. CLI wrapper around the Pi `pearls` extension storage format.",
   "type": "module",
   "bin": {

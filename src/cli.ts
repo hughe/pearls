@@ -461,10 +461,10 @@ OUTPUT
 
 PAGER
   On a terminal, human output is piped through $PEARLS_PAGER, falling
-  back to $PAGER, then "less". When less is used and $LESS is unset,
-  LESS=FRX is set so short output prints inline (the pager never
-  engages) and colors pass through. Set PEARLS_PAGER="" to disable.
-  Piped or --json output is never paged.
+  back to $PAGER, then "less". When less is used, pearls ensures LESS
+  contains FRX (quit-if-one-screen, pass colors, no alternate screen),
+  adding any missing flags to your existing configuration. Set
+  PEARLS_PAGER="" to disable. Piped or --json output is never paged.
 
 EXAMPLES
   pearls create "Write README" --tag docs --body "Explain storage format"

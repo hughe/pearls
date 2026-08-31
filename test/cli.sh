@@ -408,6 +408,13 @@ if command -v script >/dev/null 2>&1; then
 	assert_eq "$(cat "$WORK/pager-less-env" 2>/dev/null)" "FRX" \
 		"less-lookalike pager gets LESS=FRX"
 
+	# Existing LESS flags are merged with FRX.
+	rm -f "$WORK/paged.out" "$WORK/pager-less-env"
+	LESS=-R PEARLS_PAGER="$WORK/bin/less" \
+		script -qec "$ROOT/pearls-dev list" /dev/null >/dev/null 2>&1 || true
+	assert_eq "$(cat "$WORK/pager-less-env" 2>/dev/null)" "-RFX" \
+		"user's LESS=-R gets FX merged in"
+
 	# --json disables the pager even on a TTY.
 	rm -f "$WORK/paged.out"
 	env -u LESS PEARLS_PAGER="$WORK/bin/less" \
