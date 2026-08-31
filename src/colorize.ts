@@ -11,7 +11,7 @@
  *   - pearl ids (T<hex> / M<hex>) are gray — quiet chrome; the priority
  *     colors carry the meaning and the id stays reference material
  *   - priorities get their own color: bold red for P0, cooling down to
- *     blue for P4, dim for the unspecified "[P?]"
+ *     blue for P4, bright yellow for the unset "[P?]" (a warning)
  *   - closed pearls are dimmed so live work stands out
  *   - section headers are bold; metadata (tags, status, assignment) is dim
  *   - an assignment to the current session is green
@@ -27,7 +27,7 @@ const PRIORITY_PARAMS: Record<string, string[]> = {
 	"2": ["35"], // magenta
 	"3": ["36"], // cyan
 	"4": ["34"], // blue — coolest
-	"?": ["2"], // dim
+	"?": ["93"], // bright yellow — unset priority is a warning, not metadata
 };
 
 export type ColorMode = "auto" | "always" | "never";

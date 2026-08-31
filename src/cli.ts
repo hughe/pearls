@@ -56,6 +56,7 @@ import {
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { migrateTodoFilenames } from "./migrate-filenames.js";
+import { endOutput, initPager, out, pagerActive } from "./output.js";
 import {
 	colorEnabled,
 	colorPearlId,
@@ -309,12 +310,12 @@ function printHumanList(
 	const text = formatTodoList(todos, allTodos, opts);
 	// Colors only when stdout is a terminal (or forced), so piped output —
 	// the bytes agents parse — is identical to the plain formatter.
-	const out = run.color
+	const rendered = run.color
 		? colorizeListOutput(text, {
 				currentSessionId: run.ctx.sessionManager.getSessionId(),
 			})
 		: text;
-	process.stdout.write(out + "\n");
+	out(rendered + "\n");
 }
 
 function printHumanTodo(run: RunContext, todo: TodoRecord): void {
@@ -334,26 +335,26 @@ function printHumanTodo(run: RunContext, todo: TodoRecord): void {
 				? "32"
 				: "2";
 		const assign = todo.assigned_to_session ? `\x1b[${assignColor}m${assignText}\x1b[0m` : "";
-		process.stdout.write(
+		out(
 				`${colorPearlId(id, closed)} ${closed ? dim(title) : title}${dim(tagText)}${assign}\n`,
 		);
 	} else {
-		process.stdout.write(`${id} ${title}${tagText}${assignText}\n`);
+		out(`${id} ${title}${tagText}${assignText}\n`);
 	}
-	process.stdout.write(`status: ${run.color && closed ? dim(status) : status}\n`);
+	out(`status: ${run.color && closed ? dim(status) : status}\n`);
 	const pri = todo.priority !== undefined ? String(todo.priority) : "?";
-	process.stdout.write(
+	out(
 		`priority: ${run.color ? colorPriorityValue(todo.priority, closed) : pri}\n`,
 	);
 	if (todo.parent) {
 		const parent = formatTodoId(todo.parent);
-		process.stdout.write(`parent: ${run.color ? colorPearlId(parent) : parent}\n`);
+		out(`parent: ${run.color ? colorPearlId(parent) : parent}\n`);
 	}
 	if (todo.created_at) {
-		process.stdout.write(`created: ${todo.created_at}\n`);
+		out(`created: ${todo.created_at}\n`);
 	}
 	if (todo.body && todo.body.trim()) {
-		process.stdout.write("\n" + todo.body.trimEnd() + "\n");
+		out("\n" + todo.body.trimEnd() + "\n");
 	}
 }
 
@@ -457,6 +458,13 @@ OUTPUT
   sections used by the underlying todo tool. --json produces a stable
   JSON payload (the same one Pi's todo tool returns to an LLM), so any
   agent that can run a shell command can parse pearls output directly.
+
+PAGER
+  On a terminal, human output is piped through $PEARLS_PAGER, falling
+  back to $PAGER, then "less". When less is used and $LESS is unset,
+  LESS=FRX is set so short output prints inline (the pager never
+  engages) and colors pass through. Set PEARLS_PAGER="" to disable.
+  Piped or --json output is never paged.
 
 EXAMPLES
   pearls create "Write README" --tag docs --body "Explain storage format"
@@ -581,12 +589,19 @@ async function main(argv: string[]): Promise<void> {
 		throw err;
 	}
 
+	// Start the pager before the first byte of human output. JSON and
+	// piped output skip it entirely; when the pager is running, its stdout
+	// is the terminal, so color detection below treats output as a TTY.
+	initPager({ disabled: Boolean(parsed.flags.json) });
+
 	if (parsed.flags.version) {
-		process.stdout.write(VERSION + "\n");
+		out(VERSION + "\n");
+		await endOutput();
 		return;
 	}
 	if (parsed.flags.help || parsed.command === "help" || parsed.command === undefined) {
-		process.stdout.write(HELP);
+		out(HELP);
+		await endOutput();
 		return;
 	}
 
@@ -618,13 +633,15 @@ async function main(argv: string[]): Promise<void> {
 		todosDir,
 		ctx,
 		json: Boolean(parsed.flags.json),
+		// When the pager is running, the bytes we emit land on the terminal
+		// via the pager's own stdout, so color as if we were the TTY.
 		color: colorEnabled(
 			parsed.flags["no-color"]
 				? "never"
 				: parsed.flags.color
 					? "always"
 					: "auto",
-			process.stdout,
+			pagerActive() ? { isTTY: true } : process.stdout,
 		),
 		flags: parsed.flags,
 		positional: parsed.positional,
@@ -664,7 +681,7 @@ async function main(argv: string[]): Promise<void> {
 		case "release":
 			return await cmdRelease(run);
 		case "dir":
-			process.stdout.write(todosDir + "\n");
+			out(todosDir + "\n");
 			return;
 		case "path":
 			return cmdPath(run);
@@ -677,7 +694,7 @@ async function main(argv: string[]): Promise<void> {
 		case "refine":
 			return await cmdRefine(run);
 	case "quickstart":
-			process.stdout.write(QUICKSTART);
+			out(QUICKSTART);
 			return;
 		default:
 			fail(`Unknown command: ${parsed.command}. Try 'pearls help'.`, 2);
@@ -798,13 +815,13 @@ async function cmdSearch(run: RunContext): Promise<void> {
 		const title = todo.title || "(untitled)";
 		if (run.color) {
 			const closed = isClosedStatus(todo.status);
-			process.stdout.write(
+			out(
 				`${colorPearlId(id, closed)}  ${colorPriorityTag(todo.priority, closed)} ${
 					closed ? dim(title) : title
 				}\n`,
 			);
 		} else {
-			process.stdout.write(`${id}  ${pri}${title}\n`);
+			out(`${id}  ${pri}${title}\n`);
 		}
 	}
 }
@@ -1000,7 +1017,7 @@ async function cmdReslug(run: RunContext): Promise<void> {
 			}) + "\n",
 		);
 	} else if (!run.flags.quiet) {
-		process.stdout.write(path.resolve(newPath) + "\n");
+		out(path.resolve(newPath) + "\n");
 	}
 }
 
@@ -1020,9 +1037,9 @@ async function cmdMigrateFilenames(run: RunContext): Promise<void> {
 		const verb = run.flags["dry-run"] ? "would rename" : "renamed";
 		for (const rename of result.renamed) {
 			const where = rename.archived ? " (archive)" : "";
-			process.stdout.write(`${rename.from} -> ${rename.to}${where}\n`);
+			out(`${rename.from} -> ${rename.to}${where}\n`);
 		}
-		process.stdout.write(
+		out(
 			`${verb} ${result.renamed.length} file(s), ${result.unchanged} already current\n`,
 		);
 	}
@@ -1042,7 +1059,7 @@ async function cmdDelete(run: RunContext): Promise<void> {
 
 	if (run.json) printJsonTodo(result as TodoRecord);
 	else if (!run.flags.quiet) {
-		process.stdout.write(`Deleted ${formatTodoId(id, (result as TodoRecord).type)}\n`);
+		out(`Deleted ${formatTodoId(id, (result as TodoRecord).type)}\n`);
 	}
 }
 
@@ -1091,7 +1108,7 @@ async function cmdRelease(run: RunContext): Promise<void> {
 
 function cmdPath(run: RunContext): void {
 	const id = resolveId(run);
-	process.stdout.write(path.resolve(getTodoPath(run.todosDir, id)) + "\n");
+	out(path.resolve(getTodoPath(run.todosDir, id)) + "\n");
 }
 
 // ---- summarize-memories ---------------------------------------------------
@@ -1116,11 +1133,11 @@ async function cmdSummarizeMemories(run: RunContext): Promise<void> {
 			const title = m.title || "(untitled)";
 			if (run.color) {
 				const closed = isClosedStatus(m.status);
-			process.stdout.write(
+			out(
 				`${colorPearlId(id, closed)} ${closed ? dim(title) : title}\n`,
 			);
 		} else {
-			process.stdout.write(`${id} ${title}\n`);
+			out(`${id} ${title}\n`);
 		}
 		}
 	}
@@ -1146,19 +1163,23 @@ async function cmdRefine(run: RunContext): Promise<void> {
 			JSON.stringify({ id: formatTodoId(id, todo.type), title, refine_prompt: prompt }) + "\n",
 		);
 	} else {
-		process.stdout.write(prompt + "\n");
+		out(prompt + "\n");
 	}
 }
 
 // ---------------------------------------------------------------------------
 
-main(process.argv.slice(2)).catch((err) => {
-	if (err instanceof CliError) fail(err.message, 2);
-	process.stderr.write(
-		`pearls: ${err instanceof Error ? err.message : String(err)}\n`,
-	);
-	if (process.env.PEARLS_DEBUG) {
-		process.stderr.write(String((err as Error).stack ?? err) + "\n");
-	}
-	process.exit(1);
-});
+main(process.argv.slice(2))
+	.then(() => endOutput())
+	.catch(async (err) => {
+		// Flush the pager before exiting so error paths don't lose output.
+		await endOutput();
+		if (err instanceof CliError) fail(err.message, 2);
+		process.stderr.write(
+			`pearls: ${err instanceof Error ? err.message : String(err)}\n`,
+		);
+		if (process.env.PEARLS_DEBUG) {
+			process.stderr.write(String((err as Error).stack ?? err) + "\n");
+		}
+		process.exit(1);
+	});

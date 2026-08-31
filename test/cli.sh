@@ -350,7 +350,7 @@ PID0="$(pearls create 'Colourful fixture' --priority 0 | extract_id)"
 colored="$(FORCE_COLOR=1 pearls list-all)"
 assert_contains "$colored" "$(printf '\033[90mT')" "forced color grays ids"
 assert_contains "$colored" "$(printf '\033[1;31m [P0]')" "P0 is bold red"
-assert_contains "$colored" "$(printf '\033[2m [P?]')" "unset priority is dim"
+assert_contains "$colored" "$(printf '\033[93m [P?]')" "unset priority is warning yellow"
 assert_eq "$(printf '%s' "$colored" | sed 's/\x1b\[[0-9;]*m//g')" "$(pearls list-all)" \
 	"stripped colored output equals plain output"
 
@@ -376,6 +376,47 @@ assert_not_contains "$out" "$(printf '\033')" "--no-color beats FORCE_COLOR"
 out="$(NO_COLOR=1 pearls list --color)"
 assert_contains "$out" "$(printf '\033[90mT')" "--color beats NO_COLOR"
 pearls delete "TODO-$PID0" >/dev/null
+
+section "pager"
+# A fake less records what it receives and the env it saw. Named 'less'
+# so the FRX default kicks in.
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/less" <<EOF
+#!/usr/bin/env bash
+cat > "$WORK/paged.out"
+printf '%s' "\${LESS:-unset}" > "$WORK/pager-less-env"
+EOF
+chmod +x "$WORK/bin/less"
+
+# Piped output (as in this harness) never starts the pager, even with
+# PEARLS_PAGER set — agents must always get the plain stream.
+rm -f "$WORK/paged.out"
+PEARLS_PAGER="$WORK/bin/less" pearls list >/dev/null
+[[ ! -e "$WORK/paged.out" ]] \
+	&& pass "pager not started when piped" || fail "pager not started when piped"
+
+# With a pty (via script), the pager receives the full colored listing
+# and the less-lookalike gets LESS=FRX (quit-if-one-screen etc.).
+if command -v script >/dev/null 2>&1; then
+	rm -f "$WORK/paged.out" "$WORK/pager-less-env"
+	env -u LESS PEARLS_PAGER="$WORK/bin/less" \
+		script -qec "$ROOT/pearls-dev list" /dev/null >/dev/null 2>&1 || true
+	assert_contains "$(cat "$WORK/paged.out" 2>/dev/null)" "Open todos" \
+		"pager receives list output on a TTY"
+	assert_contains "$(cat "$WORK/paged.out" 2>/dev/null)" "$(printf '\033[')" \
+		"pager receives colored output"
+	assert_eq "$(cat "$WORK/pager-less-env" 2>/dev/null)" "FRX" \
+		"less-lookalike pager gets LESS=FRX"
+
+	# --json disables the pager even on a TTY.
+	rm -f "$WORK/paged.out"
+	env -u LESS PEARLS_PAGER="$WORK/bin/less" \
+		script -qec "$ROOT/pearls-dev list --json" /dev/null >/dev/null 2>&1 || true
+	[[ ! -e "$WORK/paged.out" ]] \
+		&& pass "--json skips the pager on a TTY" || fail "--json skips the pager on a TTY"
+else
+	printf '  \033[2mskip\033[0m %s\n' "script(1) unavailable; pager-on-TTY tests skipped"
+fi
 
 section "get / show / path"
 out="$(pearls get "TODO-$ID")"
