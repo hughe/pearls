@@ -45,6 +45,43 @@ else
 	default_dest="$HOME/.zfunc"
 fi
 dest="${ZFUNC_DIR:-$default_dest}"
+
+# `$dest` must be a directory. A common snag: oh-my-zsh puts
+# `$ZSH_CUSTOM/completions` on $fpath and expects it to be a *directory* of
+# `_<cmd>` files, but some Cobra-style installers drop a completion *script*
+# at that exact path — squatting on the directory we need. Detect that and say
+# how to fix it instead of dying with a bare `mkdir: ... File exists`.
+if [[ -e "$dest" && ! -d "$dest" ]]; then
+	if head -n1 "$dest" 2>/dev/null | grep -q '^#compdef'; then
+		# Looks like a zsh completion script — it belongs *inside* the dir as `_<cmd>`.
+		cmd="$(head -n1 "$dest" | awk '{for(i=2;i<=NF;i++)if($i!~/^-/){print $i;exit}}' || true)"
+		[[ -z "$cmd" ]] && cmd="cmd"
+		cat >&2 <<EOF
+pearls: '$dest' is a file (a zsh completion script), but it needs to be a directory.
+
+oh-my-zsh puts '$dest' on \$fpath and expects a directory of completion files
+named '_<command>'. That script is squatting on the directory path, so zsh
+isn't loading it anyway. Relocate it, then re-run this script:
+
+  mv '$dest' '$dest.tmp'
+  mkdir -p '$dest'
+  mv '$dest.tmp' '$dest/_${cmd}'
+
+then restart your shell:  exec zsh
+EOF
+	else
+		cat >&2 <<EOF
+pearls: '$dest' exists but is not a directory, so completions can't go there.
+
+Move it aside, then re-run this script:
+
+  mv '$dest' '$dest.bak'
+  mkdir -p '$dest'
+EOF
+	fi
+	exit 1
+fi
+
 mkdir -p "$dest"
 
 # --- install --------------------------------------------------------------------
