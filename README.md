@@ -14,7 +14,7 @@ three surfaces stay in sync.
 
 Todos live in `.pi/todos/T<id>-<slug>.md`, and memories — pearls created
 with `--type memory` — in `.pi/todos/M<id>-<slug>.md` (override the
-directory with `--todo-dir` or `$PEARLS_DIR`). The hex `<id>` is what every
+directory with `--pearls-dir` or `$PEARLS_DIR`). The hex `<id>` is what every
 command resolves; the leading letter and the `<slug>` are derived from the
 entry's type and title purely so the directory reads well. They are intended to be **committed to the repo** so everybody
 — humans and agents, on every checkout — sees the same backlog. Only the
@@ -39,6 +39,18 @@ Closed todos are not deleted when they age out: `pearls` moves them to
   that already exist in `extensions/pearls.ts`.
 
 ## Install
+
+For a global install for your user (builds this checkout and installs into
+your npm prefix — no root required):
+
+```sh
+scripts/install.sh
+```
+
+If your npm prefix is system-owned, point it at a user directory first
+(`npm config set prefix ~/.npm-global`, plus `export PATH="$HOME/.npm-global/bin:$PATH"`).
+
+Or, by hand:
 
 ```sh
 npm install
@@ -78,9 +90,9 @@ pearls close Tdeadbeef                         # done
 
 Global flags:
 
-- `--todo-dir <path>` — override the todos directory (default `.pi/todos`
-  or `$PI_TODO_PATH`). The flag sets `PI_TODO_PATH` internally, so the
-  resolution matches Pi exactly.
+- `--pearls-dir <path>` — override the todos directory (default `.pi/todos`
+  or `$PEARLS_DIR`). The flag sets `PEARLS_DIR` internally, so the
+  resolution matches Pi exactly. `--todo-dir` is a deprecated alias.
 - `--session <id>` — identifies the caller for claim/release. Defaults to
   `$PEARLS_SESSION` or `cli:<user>@<host>`.
 - `--json` — emit a stable JSON payload (identical to what Pi's `todo`
@@ -116,6 +128,8 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
 | `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
+| `completions <shell>`   | Print a shell completion script to stdout. Currently `zsh` (the
+  default).                                                          |
 
 Ids are displayed as `T<hex>` for todos and `M<hex>` for memories, matching
 the letter on the file. Input is forgiving: the bare `<hex>`, either letter,
@@ -126,6 +140,41 @@ prefix survives — that hex is the id, and the letter and slug are only
 decoration (the front matter `type` is what actually makes something a
 memory). Retitling a
 todo deliberately does *not* rename its file; use `reslug` for that.
+
+## Shell completions
+
+`pearls completions zsh` prints a zsh completion script on stdout — it
+completes commands, flags, and pearl ids (live, from `pearls list-all`).
+Install it for this user with one command — the script auto-detects
+oh-my-zsh (installs into `$ZSH/custom/completions`, which oh-my-zsh
+already puts on `fpath`) and falls back to `~/.zfunc` otherwise,
+printing the lines to add to `.zshrc`:
+
+```sh
+scripts/install-completions.sh
+```
+
+Or install it manually anywhere on your `fpath`:
+
+```sh
+pearls completions zsh > "${fpath[1]}/_pearls"
+```
+
+or, without touching system directories:
+
+```sh
+mkdir -p ~/.zfunc
+pearls completions zsh > ~/.zfunc/_pearls
+# in .zshrc:  fpath=(~/.zfunc $fpath)  then  autoload -Uz compinit && compinit
+```
+
+Then restart your shell (`exec zsh`) and try `pearls <Tab>`. If the
+completions seem stale, zsh's cached dump is the usual culprit — remove it
+and restart:
+
+```sh
+rm -f ~/.zcompdump* && exec zsh
+```
 
 ## Tests
 

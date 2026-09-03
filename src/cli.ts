@@ -56,6 +56,7 @@ import {
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { migrateTodoFilenames } from "./migrate-filenames.js";
+import { ZSH_COMPLETION } from "./completions.js";
 import { endOutput, initPager, out, pagerActive } from "./output.js";
 import {
 	colorEnabled,
@@ -111,7 +112,8 @@ interface ParsedArgs {
 }
 
 const KNOWN_STRING_FLAGS = new Set([
-	"todo-dir",
+	"pearls-dir",
+	"todo-dir", // deprecated alias for --pearls-dir
 	"session",
 	"title",
 	"status",
@@ -373,10 +375,11 @@ USAGE
   pearls [global-flags] <command> [flags] [args]
 
 GLOBAL FLAGS
-  --todo-dir <path>      Override the todos directory (default: walk up from
+  --pearls-dir <path>    Override the todos directory (default: walk up from
                          cwd looking for .pi/todos, or $PEARLS_DIR).
   $PEARLS_DIR            Path to the todos directory (alternative to
-                         --todo-dir).
+                         --pearls-dir).
+  --todo-dir <path>      Deprecated alias for --pearls-dir.
   $PI_TODO_PATH          Deprecated alias for PEARLS_DIR. Use PEARLS_DIR
                          instead.
   --session <id>         Session id used for claim/release (default:
@@ -451,6 +454,9 @@ COMMANDS
                          should ask the user clarifying questions before
                          rewriting the todo.
   quickstart             Print an agent-oriented guide to using pearls.
+  completions <shell>    Print shell completion scripts to stdout. Shells:
+                         zsh. Install with:
+                           pearls completions zsh > "\${fpath[1]}/_pearls"
   help                   Show this help.
 
 OUTPUT
@@ -606,9 +612,15 @@ async function main(argv: string[]): Promise<void> {
 		return;
 	}
 
-	// Resolve todos dir. --todo-dir sets PEARLS_DIR (highest priority).
-	// PI_TODO_PATH is a deprecated alias; warn if it is set without --todo-dir.
-	if (typeof parsed.flags["todo-dir"] === "string") {
+	// Resolve todos dir. --pearls-dir sets PEARLS_DIR (highest priority).
+	// --todo-dir and PI_TODO_PATH are deprecated aliases; warn when used.
+	if (typeof parsed.flags["pearls-dir"] === "string") {
+		process.env.PEARLS_DIR = parsed.flags["pearls-dir"];
+	} else if (typeof parsed.flags["todo-dir"] === "string") {
+		process.stderr.write(
+			"pearls: warning: --todo-dir is deprecated. " +
+			"Use --pearls-dir instead.\n",
+		);
 		process.env.PEARLS_DIR = parsed.flags["todo-dir"];
 	} else if (hasPiTodoPathDeprecation()) {
 		process.stderr.write(
@@ -697,6 +709,8 @@ async function main(argv: string[]): Promise<void> {
 	case "quickstart":
 			out(QUICKSTART);
 			return;
+	case "completions":
+			return cmdCompletions(run);
 		default:
 			fail(`Unknown command: ${parsed.command}. Try 'pearls help'.`, 2);
 	}
@@ -1166,6 +1180,16 @@ async function cmdRefine(run: RunContext): Promise<void> {
 	} else {
 		out(prompt + "\n");
 	}
+}
+
+// ---- completions ----------------------------------------------------------
+
+function cmdCompletions(run: RunContext): void {
+	const shell = run.positional[0] ?? "zsh";
+	if (shell !== "zsh") {
+		throw new CliError(`no completions available for '${shell}' (supported: zsh)`);
+	}
+	out(ZSH_COMPLETION);
 }
 
 // ---------------------------------------------------------------------------

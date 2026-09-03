@@ -547,15 +547,23 @@ out="$(pearls get "TODO-$ID")"
 assert_not_contains "$out" "assigned:" "closing clears assignment"
 pearls reopen "TODO-$ID" >/dev/null
 
-section "--todo-dir flag"
+section "--pearls-dir flag"
 ALT="$WORK/alt-todos"
-out="$(pearls --todo-dir "$ALT" list)"
+out="$(pearls --pearls-dir "$ALT" list)"
 # formatTodoList() returns the string "No todos." for an empty set; it
 # only renders the three-section layout when there's at least one todo.
-assert_contains "$out" "No todos." "fresh --todo-dir starts empty"
-pearls --todo-dir "$ALT" create "In alt dir" >/dev/null
+assert_contains "$out" "No todos." "fresh --pearls-dir starts empty"
+pearls --pearls-dir "$ALT" create "In alt dir" >/dev/null
 alt_md_count=$(find "$ALT" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
-assert_eq "$alt_md_count" "1" "--todo-dir wrote exactly one .md into alt directory"
+assert_eq "$alt_md_count" "1" "--pearls-dir wrote exactly one .md into alt directory"
+
+section "--todo-dir deprecated alias"
+out="$(pearls --todo-dir "$ALT" list 2>&1)"
+assert_contains "$out" "In alt dir" "--todo-dir still resolves the directory"
+assert_contains "$out" "warning: --todo-dir is deprecated" "--todo-dir warns about deprecation"
+out="$(pearls --todo-dir "$ALT" create "Second in alt dir" --json)"
+alt_md_count=$(find "$ALT" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')
+assert_eq "$alt_md_count" "2" "--todo-dir still writes into alt directory"
 
 section "delete"
 out="$(pearls delete "TODO-$ID")"
@@ -870,7 +878,7 @@ cat > "$GCDIR/Tcafe0003-no-closed-at.md" <<'OLD'
 }
 OLD
 
-pearls --todo-dir "$GCDIR" list-all >/dev/null   # triggers gc
+pearls --pearls-dir "$GCDIR" list-all >/dev/null   # triggers gc
 [[ -f "$GCDIR/archive/Tcafe0001-retired.md" ]] && pass "old closed pearl moved to archive" \
 	|| fail "old closed pearl moved to archive"
 [[ -f "$GCDIR/Tcafe0002-just-closed.md" ]] && pass "recently closed pearl survives gc" \
@@ -889,15 +897,15 @@ cat > "$GCDIR/Mcafe0005-retired-memory.md" <<'OLDMEM'
   "type": "memory"
 }
 OLDMEM
-pearls --todo-dir "$GCDIR" list-all >/dev/null
+pearls --pearls-dir "$GCDIR" list-all >/dev/null
 [[ -f "$GCDIR/archive/Mcafe0005-retired-memory.md" ]] \
 	&& pass "archived memory keeps its M prefix" || fail "archived memory keeps its M prefix"
 
-out="$(pearls --todo-dir "$GCDIR" list-all)"
+out="$(pearls --pearls-dir "$GCDIR" list-all)"
 assert_not_contains "$out" "Retired long ago" "archived pearl is out of list-all"
-out="$(pearls --todo-dir "$GCDIR" list-all --archived)"
+out="$(pearls --pearls-dir "$GCDIR" list-all --archived)"
 assert_contains "$out" "Retired long ago" "--archived brings it back"
-assert_contains "$(pearls --todo-dir "$GCDIR" get TODO-cafe0001 --json)" '"title": "Retired long ago"' \
+assert_contains "$(pearls --pearls-dir "$GCDIR" get TODO-cafe0001 --json)" '"title": "Retired long ago"' \
 	"archived pearl is still readable by id"
 
 # archive: false keeps the old delete-on-gc behaviour.
@@ -912,7 +920,7 @@ cat > "$GCDIR/Tcafe0004-doomed.md" <<'OLD'
   "closed_at": "2020-02-01T00:00:00.000Z"
 }
 OLD
-pearls --todo-dir "$GCDIR" list-all >/dev/null
+pearls --pearls-dir "$GCDIR" list-all >/dev/null
 [[ ! -f "$GCDIR/Tcafe0004-doomed.md" && ! -f "$GCDIR/archive/Tcafe0004-doomed.md" ]] \
 	&& pass "archive:false deletes as before" || fail "archive:false deletes as before"
 
@@ -921,6 +929,23 @@ section "--no-gc"
 # accepted and the command still succeeds.
 out="$(pearls --no-gc list)"
 assert_contains "$out" "Open todos" "--no-gc still produces output"
+
+section "completions"
+out="$(pearls completions zsh)"
+assert_contains "$out" "#compdef pearls" "completions zsh prints a zsh completion script"
+assert_contains "$out" "_pearls_ids" "completions zsh completes pearl ids"
+out="$(pearls completions)"
+assert_contains "$out" "#compdef pearls" "completions defaults to zsh"
+assert_status 2 "completions for an unsupported shell exits 2" pearls completions bash
+if command -v zsh >/dev/null 2>&1; then
+	if pearls completions zsh | zsh -n >/dev/null 2>&1; then
+		pass "emitted completion script passes zsh -n"
+	else
+		fail "emitted completion script passes zsh -n"
+	fi
+else
+	printf '  \033[33mskip\033[0m zsh not installed; skipping syntax check\n'
+fi
 
 # ---------------------------------------------------------------------------
 # Summary
