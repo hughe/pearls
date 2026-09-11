@@ -12,8 +12,8 @@ and a human can use the same commands from the terminal. If you do happen
 to be running Pi, its `/pearls` UI reads and writes the same files, so all
 three surfaces stay in sync.
 
-Todos live in `.pi/todos/T<id>-<slug>.md`, and memories — pearls created
-with `--type memory` — in `.pi/todos/M<id>-<slug>.md` (override the
+Todos live in `.pi/pearls/T<id>-<slug>.md`, and memories — pearls created
+with `--type memory` — in `.pi/pearls/M<id>-<slug>.md` (override the
 directory with `--pearls-dir` or `$PEARLS_DIR`). The hex `<id>` is what every
 command resolves; the leading letter and the `<slug>` are derived from the
 entry's type and title purely so the directory reads well. They are intended to be **committed to the repo** so everybody
@@ -22,10 +22,12 @@ per-session `*.lock` files are gitignored.
 
 Pearls written before this scheme are named `<id>.md`. They keep working
 everywhere — an un-migrated checkout is never broken — and
-`pearls migrate-filenames` converts them.
+`pearls migrate-filenames` converts them. The same command moves a legacy
+`.pi/todos/` directory to `.pi/pearls/` (both locations are found by the
+walk-up search, so nothing breaks before you migrate).
 
 Closed todos are not deleted when they age out: `pearls` moves them to
-`.pi/todos/archive/`, which is committed alongside the backlog.
+`.pi/pearls/archive/`, which is committed alongside the backlog.
 
 ## Layout
 
@@ -72,7 +74,7 @@ pearls search readme                           # fuzzy-search open todos
 pearls search readme --closed                  # include closed todos in results
 pearls get Tdeadbeef                           # show one
 pearls create "A long title" --slug short      # choose the filename slug
-pearls migrate-filenames --dry-run             # preview <id>.md renames
+pearls migrate-filenames --dry-run             # preview <id>.md + directory renames
 pearls append Tdeadbeef --stdin-body < notes.md
 pearls close Tdeadbeef                         # shortcut for --status closed
 pearls claim Tdeadbeef --session mysession     # --force to steal
@@ -90,7 +92,7 @@ pearls close Tdeadbeef                         # done
 
 Global flags:
 
-- `--pearls-dir <path>` — override the todos directory (default `.pi/todos`
+- `--pearls-dir <path>` — override the todos directory (default `.pi/pearls`
   or `$PEARLS_DIR`). The flag sets `PEARLS_DIR` internally, so the
   resolution matches Pi exactly. `--todo-dir` is a deprecated alias.
 - `--session <id>` — identifies the caller for claim/release. Defaults to
@@ -126,7 +128,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `dir`                   | Print the resolved todos directory.                                  |
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
-| `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
+| `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. Also moves a legacy `.pi/todos/` directory to `.pi/pearls/`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 | `completions <shell>`   | Print a shell completion script to stdout. Currently `zsh` (the
   default).                                                          |

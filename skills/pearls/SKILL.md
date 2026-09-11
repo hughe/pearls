@@ -65,11 +65,12 @@ the bare hex, the other letter, and the older `TODO-<hex>` form, so ids from
 old notes still work.
 
 On disk a todo is `T<hex>-<slug>.md` and a memory is `M<hex>-<slug>.md`,
-both under `.pi/todos`. The hex is the id; the letter follows the entry's
+both under `.pi/pearls` (a legacy `.pi/todos` still works and is moved by
+`pearls migrate-filenames`). The hex is the id; the letter follows the entry's
 type and the slug just makes the directory readable, derived from the title
 (override it with `--slug` when creating). Changing a title does not rename
 the file — run `pearls reslug <id>` if the user wants the filename to catch
-up. Closed todos that age out are moved to `.pi/todos/archive/` rather than
+up. Closed todos that age out are moved to `.pi/pearls/archive/` rather than
 deleted; `pearls list-all --archived` includes them.
 
 ## Workflow
@@ -247,7 +248,7 @@ pearls close <id> --json
 4. **Use --json always.** You need structured output to reason about the
    results. The human-friendly format is for terminals.
 5. **Don't edit files directly.** Always go through the `pearls` CLI.
-   The underlying `.pi/todos/` files use lock-based coordination that
+   The underlying `.pi/pearls/` files use lock-based coordination that
    bypassing would break.
 6. **Close, don't delete.** Use `pearls close` to mark work done.
    `delete` is only for tasks created by mistake.

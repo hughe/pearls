@@ -9,7 +9,7 @@
  * Pi being present at runtime.
  *
  * Storage is 100% compatible with `extensions/todo.ts`: both read and write
- * the same `.pi/todos/<id>.md` files with JSON front matter, honour
+ * the same `.pi/pearls/<id>.md` files with JSON front matter, honour
  * `PI_TODO_PATH`, respect lock files, and share a settings.json.
  *
  * Every operation here is implemented by calling a function that already
@@ -376,7 +376,7 @@ USAGE
 
 GLOBAL FLAGS
   --pearls-dir <path>    Override the todos directory (default: walk up from
-                         cwd looking for .pi/todos, or $PEARLS_DIR).
+                         cwd looking for .pi/pearls, or $PEARLS_DIR).
   $PEARLS_DIR            Path to the todos directory (alternative to
                          --pearls-dir).
   --todo-dir <path>      Deprecated alias for --pearls-dir.
@@ -445,6 +445,7 @@ COMMANDS
   migrate-filenames      Bring filenames up to date: todos still using the
                          old <hex>.md scheme become T<hex>-<slug>.md, and
                          memories still lettered T become M<hex>-<slug>.md.
+                         A legacy .pi/todos directory is moved to .pi/pearls.
                          --dry-run to preview, --force to disambiguate a
                          name that is already taken.
   summarize-memories   List memory index (title + ID only, no bodies).
@@ -490,7 +491,7 @@ const QUICKSTART = `pearls quickstart — an agent's guide to driving the todo l
 
 WHAT THIS IS
   pearls is a CLI for a shared todo backlog living in
-  .pi/todos/T<id>-<slug>.md, alongside memories in M<id>-<slug>.md.
+  .pi/pearls/T<id>-<slug>.md, alongside memories in M<id>-<slug>.md.
   Files are committed to the repo, so humans and agents on every checkout
   see the same list. Any agent that can run a shell command can use it.
 
@@ -549,7 +550,7 @@ IDS AND FILENAMES
   converted with 'pearls migrate-filenames'.
 
 ARCHIVE
-  Closed todos older than gcDays are moved to .pi/todos/archive rather
+  Closed todos older than gcDays are moved to .pi/pearls/archive rather
   than deleted. They drop out of list/list-all but 'pearls get <id>' and
   'pearls list-all --archived' still reach them. 'pearls delete' is a real
   delete and is still for mistakes only.
@@ -560,7 +561,7 @@ OUTPUT FOR AGENTS
   so any code that already parses Pi tool output works here unchanged.
 
 WHAT NOT TO DO
-  - Don't edit .pi/todos/*.md by hand while pearls is running; the lock
+  - Don't edit .pi/pearls/*.md by hand while pearls is running; the lock
     files (.lock) coordinate concurrent writers. Renaming a file by hand is
     survivable as long as the T<hex>- / M<hex>- prefix stays intact — that
     hex is the id — but 'pearls reslug' is the safe way to do it.
@@ -1050,6 +1051,10 @@ async function cmdMigrateFilenames(run: RunContext): Promise<void> {
 		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 	} else {
 		const verb = run.flags["dry-run"] ? "would rename" : "renamed";
+		if (result.dirMove) {
+			const moveVerb = result.dirMove.method === "dry-run" ? "would move" : "moved";
+			out(`${moveVerb} directory ${result.dirMove.from} -> ${result.dirMove.to}\n`);
+		}
 		for (const rename of result.renamed) {
 			const where = rename.archived ? " (archive)" : "";
 			out(`${rename.from} -> ${rename.to}${where}\n`);

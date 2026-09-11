@@ -1,13 +1,16 @@
 /**
  * `pearls migrate-filenames` — convert a todos directory to the current
- * filename scheme.
+ * filename scheme (and, when it is still the legacy `.pi/todos`, move the
+ * directory itself to `.pi/pearls`).
  *
  * Pearls used to be stored as `<hex>.md`; they are now `T<hex>-<slug>.md`
  * for todos and `M<hex>-<slug>.md` for memories, where the slug is derived
  * from the title (or from an explicit `--slug`).
  * Reading both layouts works everywhere, so migrating is optional — but a
  * directory of hex filenames is miserable to browse, which is the whole
- * point of the scheme.
+ * point of the scheme. The same goes for the directory location: a legacy
+ * `.pi/todos` is still found by the walk-up search, but migrating renames
+ * it to `.pi/pearls` so new projects match the docs.
  *
  * The rename prefers `git mv` for tracked files so history follows the
  * pearl, and falls back to a plain rename otherwise. The derived slug is
@@ -52,6 +55,52 @@ export interface MigrateResult {
 	renamed: MigrateRename[];
 	unchanged: number;
 	errors: string[];
+	/** Set when the directory itself moved `.pi/todos` -> `.pi/pearls`. */
+	dirMove?: MigrateDirMove;
+}
+
+export interface MigrateDirMove {
+	from: string;
+	to: string;
+	method: "git" | "fs" | "dry-run";
+}
+
+const LEGACY_DIR_BASENAME = "todos";
+const PEARLS_DIR_BASENAME = "pearls";
+
+/**
+ * When `todosDir` is a legacy `.pi/todos` (i.e. resolved by the walk-up
+ * search rather than an explicit override), plan its move to the sibling
+ * `.pi/pearls`. Returns null when there is nothing to move.
+ */
+function planDirMove(
+	todosDir: string,
+): { from: string; to: string } | { error: string } | null {
+	// An explicit PEARLS_DIR / PI_TODO_PATH / --pearls-dir override wins over
+	// the default location; moving what it points at would break it, so only
+	// migrate directories the walk-up search found.
+	if (
+		(process.env.PEARLS_DIR && process.env.PEARLS_DIR.trim()) ||
+		(process.env.PI_TODO_PATH && process.env.PI_TODO_PATH.trim())
+	) {
+		return null;
+	}
+	const parent = path.dirname(path.resolve(todosDir));
+	if (
+		path.basename(todosDir) !== LEGACY_DIR_BASENAME ||
+		path.basename(parent) !== ".pi"
+	) {
+		return null;
+	}
+	const from = path.resolve(todosDir);
+	const to = path.join(path.dirname(parent), ".pi", PEARLS_DIR_BASENAME);
+	if (existsSync(to)) {
+		return {
+			error:
+			`cannot move ${from}: ${to} already exists; merge them manually and re-run`,
+		};
+	}
+	return { from, to };
 }
 
 /** True when `dir` sits inside a git work tree. */
@@ -182,7 +231,27 @@ async function migrateDir(
 
 export async function migrateTodoFilenames(opts: MigrateOptions): Promise<MigrateResult> {
 	const result: MigrateResult = { renamed: [], unchanged: 0, errors: [] };
-	await migrateDir(opts.todosDir, opts, false, result);
-	await migrateDir(getTodoArchiveDir(opts.todosDir), opts, true, result);
+	let todosDir = opts.todosDir;
+
+	// Directory move first (.pi/todos -> .pi/pearls) so the filename pass
+	// below operates on the final location and a lock taken during it lives
+	// in the directory the walk-up search will find next time.
+	const dirMove = planDirMove(todosDir);
+	if (dirMove) {
+		if ("error" in dirMove) {
+			result.errors.push(dirMove.error);
+		} else if (opts.dryRun) {
+			result.dirMove = { ...dirMove, method: "dry-run" };
+		} else {
+			const useGit = await isGitWorkTree(dirMove.from);
+			const method = await movePath(dirMove.from, dirMove.from, dirMove.to, useGit);
+			result.dirMove = { ...dirMove, method };
+			todosDir = dirMove.to;
+		}
+	}
+
+	const opts2 = { ...opts, todosDir };
+	await migrateDir(todosDir, opts2, false, result);
+	await migrateDir(getTodoArchiveDir(todosDir), opts2, true, result);
 	return result;
 }

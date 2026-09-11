@@ -51,6 +51,22 @@ export PEARLS_DIR="$WORK/todos"
 # Deterministic session id so claim/release assertions are stable.
 export PEARLS_SESSION="test-session"
 
+# Absolute copy of PEARLS_CMD for runs from another directory (paths inside
+# it are relative to $ROOT). Used by the legacy-directory-location tests,
+# which must cd into a scratch project without the PEARLS_DIR override.
+ABS_PEARLS_CMD=()
+for _part in "${PEARLS_CMD[@]}"; do
+	if [[ "$_part" == /* ]]; then
+		ABS_PEARLS_CMD+=("$_part")
+	elif [[ "$_part" == */* && -e "$ROOT/$_part" ]]; then
+		ABS_PEARLS_CMD+=("$ROOT/$_part")
+	else
+		# Bare program names (node) and custom paths outside $ROOT stay as-is.
+		ABS_PEARLS_CMD+=("$_part")
+	fi
+done
+unset _part
+
 pearls() {
 	"${PEARLS_CMD[@]}" "$@"
 }
@@ -838,6 +854,53 @@ assert_contains "$(pearls memories)" "Legacy memory" "re-lettered memory still l
 assert_not_contains "$(pearls list)" "Legacy memory" "memories stay out of the todo list"
 out="$(pearls migrate-filenames)"
 assert_contains "$out" "renamed 0 file(s)" "prefix migration is idempotent"
+
+section "legacy directory location (.pi/todos -> .pi/pearls)"
+# Pearls used to live in .pi/todos; the walk-up search still finds one, and
+# migrate-filenames moves it to .pi/pearls. These runs cannot use the
+# PEARLS_DIR override (an explicit override never moves), so unset it and
+# drive the CLI from a scratch project directory.
+LEGACY_PROJ="$WORK/legacy-project"
+mkdir -p "$LEGACY_PROJ/.pi/todos"
+cat > "$LEGACY_PROJ/.pi/todos/Tfeed0001-stale-location.md" <<'LEGACYDIR'
+{
+  "id": "feed0001",
+  "title": "Stale location",
+  "tags": [],
+  "status": "open",
+  "created_at": "2026-01-01T00:00:00.000Z",
+  "type": "todo",
+  "slug": "stale-location"
+}
+
+# Stale location
+LEGACYDIR
+out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
+assert_eq "$out" "$LEGACY_PROJ/.pi/todos" "walk-up finds legacy .pi/todos"
+
+out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-filenames --dry-run)"
+assert_contains "$out" "would move directory" "dry run previews the directory move"
+assert_contains "$out" ".pi/todos -> " "preview names both locations"
+[[ -f "$LEGACY_PROJ/.pi/todos/Tfeed0001-stale-location.md" ]] && pass "dry run leaves the directory in place" \
+	|| fail "dry run leaves the directory in place"
+
+out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-filenames)"
+assert_contains "$out" "moved directory" "migration reports the directory move"
+[[ -f "$LEGACY_PROJ/.pi/pearls/Tfeed0001-stale-location.md" ]] && pass "pearl file moved along with the directory" \
+	|| fail "pearl file moved along with the directory"
+[[ ! -d "$LEGACY_PROJ/.pi/todos" ]] && pass "legacy .pi/todos is gone" || fail "legacy .pi/todos is gone"
+
+out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
+assert_eq "$out" "$LEGACY_PROJ/.pi/pearls" "dir resolves to .pi/pearls after migration"
+assert_contains "$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" list)" "Stale location" \
+	"pearl is readable from the new location"
+out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-filenames)"
+assert_not_contains "$out" "moved directory" "directory move is not repeated on a second run"
+
+# When both exist, .pi/pearls wins over a stale legacy .pi/todos sibling.
+mkdir -p "$LEGACY_PROJ/.pi/todos"
+out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
+assert_eq "$out" "$LEGACY_PROJ/.pi/pearls" ".pi/pearls is preferred over .pi/todos"
 
 section "archive on gc"
 # Separate todos dir: these settings collect aggressively.
