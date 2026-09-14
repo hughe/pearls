@@ -403,6 +403,10 @@ COMMANDS
                          or children of an epic.
   list-all               List every todo including closed. Add --archived to
                          include todos GC has moved to <todos-dir>/archive.
+  list-tags              Count tags on open + assigned todos, like
+                         'sort | uniq -c'. Add --closed to include closed
+                         todos; --archived folds in the archive too.
+  tags                   Alias for list-tags.
   search [filters]       Filter todos. At least one of:
                            -f, --fuzzy <term>      Fuzzy-match id/title/
                                                     tags/status/assignee.
@@ -478,6 +482,7 @@ EXAMPLES
   pearls list --json
   pearls search -f readme              # open/assigned todos mentioning "readme"
   pearls search -f readme --closed     # include closed ones too
+  pearls list-tags                     # count tags on open/assigned todos
   pearls search -p 0                   # only priority-0 todos
   pearls search -c Tdeadbeef           # children of Tdeadbeef
   pearls append Tdeadbeef --stdin-body < notes.md
@@ -531,6 +536,7 @@ INSPECTING / SEARCHING
   pearls get T<id>                # full body
   pearls search -f <query>        # fuzzy match across id/title/tags/status
   pearls search -f <query> --closed  # include closed todos
+  pearls list-tags                # see which tags are in use
   pearls search -p 0              # priority 0 todos
   pearls search -c T<id>          # children of <id>
   pearls list-all                 # everything, including closed
@@ -666,6 +672,9 @@ async function main(argv: string[]): Promise<void> {
 			return await cmdList(run, { includeClosed: false });
 		case "list-all":
 			return await cmdList(run, { includeClosed: true });
+		case "list-tags":
+		case "tags":
+			return await cmdListTags(run);
 		case "memories":
 			return await cmdMemories(run);
 		case "search":
@@ -744,6 +753,55 @@ async function cmdList(
 		// Pass the filter through: `list` hides closed pearls, so it must hide
 		// closed children of an epic too, or the tree contradicts the sections.
 		printHumanList(run, listed, todos, { includeClosed: opts.includeClosed });
+	}
+}
+
+// ---- list-tags -------------------------------------------------------------
+
+interface TagCount {
+	tag: string;
+	count: number;
+}
+
+function countTags(todos: TodoFrontMatter[]): TagCount[] {
+	const counts = new Map<string, number>();
+	for (const todo of todos) {
+		for (const tag of todo.tags ?? []) {
+			const normalized = tag.trim();
+			if (!normalized) continue;
+			counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+		}
+	}
+	return [...counts.entries()]
+		.map(([tag, count]) => ({ tag, count }))
+		.sort((a, b) => a.tag.localeCompare(b.tag));
+}
+
+async function cmdListTags(run: RunContext): Promise<void> {
+	const allTodos = await listTodos(run.todosDir);
+	if (run.flags.archived) {
+		allTodos.push(...(await listTodos(getTodoArchiveDir(run.todosDir))));
+	}
+	const todos = allTodos.filter((t) => t.type !== "memory");
+	const candidates = run.flags.closed
+		? todos
+		: (() => {
+				const { assignedTodos, openTodos } = splitTodosByAssignment(todos);
+				return [...assignedTodos, ...openTodos];
+			})();
+	const tags = countTags(candidates);
+
+	if (run.json) {
+		process.stdout.write(JSON.stringify(tags, null, 2) + "\n");
+		return;
+	}
+
+	if (tags.length === 0) {
+		out("No tags.\n");
+		return;
+	}
+	for (const entry of tags) {
+		out(`${String(entry.count).padStart(4, " ")} ${entry.tag}\n`);
 	}
 }
 

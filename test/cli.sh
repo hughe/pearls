@@ -152,6 +152,7 @@ section "help"
 out="$(pearls help)"
 assert_contains "$out" "pearls — agent-friendly todos" "help prints banner"
 assert_contains "$out" "create <title...>" "help lists create command"
+assert_contains "$out" "list-tags" "help lists list-tags command"
 assert_contains "$out" "--json" "help documents --json"
 assert_contains "$out" "quickstart" "help lists quickstart command"
 
@@ -225,6 +226,24 @@ assert_contains "$out" '"open": [' "json list has open array"
 assert_contains "$out" '"closed": []' "json list has empty closed"
 # Body isn't part of the list payload (matches Pi tool shape).
 assert_not_contains "$out" '"body"' "json list omits body field"
+
+section "list-tags"
+out="$(pearls list-tags)"
+assert_contains "$out" "   1 docs" "list-tags counts docs tag"
+assert_contains "$out" "   1 qa" "list-tags counts qa tag"
+assert_contains "$out" "   1 readme" "list-tags counts readme tag"
+
+out="$(pearls tags --json)"
+assert_contains "$out" '"tag": "docs"' "tags alias supports JSON output"
+assert_contains "$out" '"count": 1' "list-tags JSON includes counts"
+
+CLOSED_TAG_ID="$(pearls create 'Closed tagged fixture' --tag docs | extract_id)"
+pearls close "$CLOSED_TAG_ID" >/dev/null
+out="$(pearls list-tags)"
+assert_contains "$out" "   1 docs" "list-tags excludes closed todos by default"
+out="$(pearls list-tags --closed)"
+assert_contains "$out" "   2 docs" "list-tags --closed includes closed todos"
+pearls delete "$CLOSED_TAG_ID" >/dev/null
 
 section "search (fuzzy)"
 # Add an easily-matched third todo so search has something distinctive
@@ -996,6 +1015,7 @@ assert_contains "$out" "Open todos" "--no-gc still produces output"
 section "completions"
 out="$(pearls completions zsh)"
 assert_contains "$out" "#compdef pearls" "completions zsh prints a zsh completion script"
+assert_contains "$out" "list-tags" "completions zsh includes list-tags"
 assert_contains "$out" "_pearls_ids" "completions zsh completes pearl ids"
 out="$(pearls completions)"
 assert_contains "$out" "#compdef pearls" "completions defaults to zsh"

@@ -53,6 +53,8 @@ _pearls() {
 	commands=(
 		'list:list open and assigned todos'
 		'list-all:list every todo including closed'
+		'list-tags:count tags on open and assigned todos'
+		'tags:alias for list-tags'
 		'search:filter todos by fuzzy text, priority or parent'
 		'get:print a single todo'
 		'show:alias for get'
@@ -92,6 +94,12 @@ _pearls() {
 					;;
 				list-all)
 					_arguments \\
+						'--archived[include archived todos]' \\
+						'--json[emit stable JSON output]'
+					;;
+				list-tags|tags)
+					_arguments \\
+						'--closed[include closed todos]' \\
 						'--archived[include archived todos]' \\
 						'--json[emit stable JSON output]'
 					;;

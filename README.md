@@ -70,8 +70,9 @@ pearls help                                    # list commands
 pearls create "Write README" --tag docs        # create a todo
 pearls list                                    # human output
 pearls list --json                             # machine-readable (matches Pi tool output)
-pearls search readme                           # fuzzy-search open todos
-pearls search readme --closed                  # include closed todos in results
+pearls list-tags                               # count tags, like sort | uniq -c
+pearls search -f readme                        # fuzzy-search open todos
+pearls search -f readme --closed               # include closed todos in results
 pearls get Tdeadbeef                           # show one
 pearls create "A long title" --slug short      # choose the filename slug
 pearls migrate-filenames --dry-run             # preview <id>.md + directory renames
@@ -115,6 +116,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 | ----------------------- | -------------------------------------------------------------------- |
 | `list`                  | Open + assigned todos (default). Closed todos are hidden at every level of the tree, children of an epic included. |
 | `list-all`              | Includes closed. A closed child is shown nested under its epic, not repeated as a flat entry. `--archived` also includes the archive. |
+| `list-tags` / `tags`    | Counts tags on open + assigned todos, like `sort | uniq -c`. Add `--closed` to include closed todos; `--archived` also includes the archive. `--json` emits entries like `{"tag":"docs","count":2}`. |
 | `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `T<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
 | `get <id>` / `show <id>`| Single todo, body included.                                          |
 | `create <title…>`       | `--tag` (repeatable), `--status`, `--body`, `--body-file`, `--stdin-body`, `--slug` (filename slug; defaults to the title). |
