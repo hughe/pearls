@@ -1,16 +1,18 @@
 # Pearls
 
-An agent-friendly to-do list manager, inspired by [Beads](https://github.com/steveyegge/beads)
-and wrapped around Armin Ronacher's
-[`todos.ts`](https://github.com/mitsuhiko/agent-stuff/blob/main/extensions/todos.ts)
-extension for [Pi](https://github.com/mariozechner/pi).
+An agent-friendly to-do list manager, inspired by [Beads](https://github.com/steveyegge/beads).
+Its storage format and Pi extension were seeded from Armin Ronacher's
+[`todos.ts`](https://github.com/mitsuhiko/agent-stuff/blob/main/extensions/todos.ts),
+which pearls has since made its own — the copy in `extensions/pearls.ts`
+is the canonical implementation and diverges freely from the original.
 
-`pearls` is a thin CLI around Armin's `todos.ts`. It is **not** Pi-specific
-— any coding agent that can run a shell command (Claude Code, Cursor,
-Aider, Codex, a plain bash agent, etc.) can drive todos through `pearls`,
-and a human can use the same commands from the terminal. If you do happen
-to be running Pi, its `/pearls` UI reads and writes the same files, so all
-three surfaces stay in sync.
+`pearls` is a thin CLI around the pearls extension (`extensions/pearls.ts`).
+It is **not** Pi-specific — any coding agent that can run a shell command
+(Claude Code, Cursor, Aider, Codex, a plain bash agent, etc.) can drive
+todos through `pearls`, and a human can use the same commands from the
+terminal. If you do happen to be running Pi, its `/pearls` UI reads and
+writes the same files through the same code, so all surfaces stay in
+sync.
 
 Todos live in `.pi/pearls/T<id>-<slug>.md`, and memories — pearls created
 with `--type memory` — in `.pi/pearls/M<id>-<slug>.md` (override the
@@ -109,6 +111,10 @@ Storage settings live in `<todos-dir>/settings.json`:
   Todos closed before `closed_at` existed fall back to `created_at`.
 - `archive` (default `true`) — move retired todos to `<todos-dir>/archive/`
   instead of deleting them.
+- `layout` (default `"frontmatter"`) — which on-disk layout new writes
+  use: `"frontmatter"` (JSON at the top) or `"footer"` (markdown first,
+  JSON at the bottom after a `---` separator). Managed by
+  `pearls migrate-layout`; both layouts are always readable.
 
 ## Commands
 
@@ -131,6 +137,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
 | `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. Also moves a legacy `.pi/todos/` directory to `.pi/pearls/`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
+| `migrate-layout`        | Move the JSON metadata block of every pearl between the two on-disk layouts: `--to frontmatter` (default: JSON at the top) or `--to footer` (markdown body first, JSON after a `---` separator at the bottom). `--dry-run` previews. Also updates `settings.json` so future writes use the chosen layout. Both layouts are always readable, so the directory keeps working during and after the switch. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 | `completions <shell>`   | Print a shell completion script to stdout. Currently `zsh` (the
   default).                                                          |
@@ -144,6 +151,30 @@ prefix survives — that hex is the id, and the letter and slug are only
 decoration (the front matter `type` is what actually makes something a
 memory). Retitling a
 todo deliberately does *not* rename its file; use `reslug` for that.
+
+## File layout
+
+Each pearl is a markdown file plus a JSON metadata block. Two layouts are
+supported:
+
+```
+frontmatter (default)      footer
+-----------------------------------------------------------------
+{                          # Title
+  "id": "…",              body text
+  "title": "…"
+}                          ---
+                           { "id": "…", "title": "…" }
+# Title
+body text
+```
+
+Reading always supports both layouts, so a directory can mix them freely
+(`migrate-layout` rewrites every pearl and records the choice in
+`settings.json` so future writes match). The footer layout puts the
+human-readable text first. It is flagged experimental only because it is
+new — the CLI and the Pi extension share the same reader, so everything
+understands both layouts.
 
 ## Shell completions
 

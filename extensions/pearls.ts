@@ -84,6 +84,7 @@ const DEFAULT_TODO_SETTINGS = {
 	gc: true,
 	gcDays: 30,
 	archive: true,
+	layout: "frontmatter" as TodoLayout,
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
@@ -114,15 +115,25 @@ interface LockInfo {
 	created_at: string;
 }
 
-interface TodoSettings {
+export interface TodoSettings {
 	gc: boolean;
 	gcDays: number;
 	archive: boolean;
+	layout: TodoLayout;
 }
 
 type KeybindingMatcher = {
 	matches: (keyData: string, keybindingId: string) => boolean;
 };
+
+/**
+ * On-disk layout of a todo file: JSON metadata at the top (the original,
+ * default layout) or at the bottom, after a `---` separator line.
+ *
+ * Reading always supports both layouts, so files can be migrated freely;
+ * `layout` only decides what *new* writes look like.
+ */
+export type TodoLayout = "frontmatter" | "footer";
 
 const TodoParams = Type.Object({
 	action: StringEnum([
@@ -909,10 +920,12 @@ function normalizeTodoSettings(raw: Partial<TodoSettings>): TodoSettings {
 	const gc = raw.gc ?? DEFAULT_TODO_SETTINGS.gc;
 	const gcDays = Number.isFinite(raw.gcDays) ? raw.gcDays : DEFAULT_TODO_SETTINGS.gcDays;
 	const archive = raw.archive ?? DEFAULT_TODO_SETTINGS.archive;
+	const layout: TodoLayout = raw.layout === "footer" ? "footer" : "frontmatter";
 	return {
 		gc: Boolean(gc),
 		gcDays: Math.max(0, Math.floor(gcDays)),
 		archive: Boolean(archive),
+		layout,
 	};
 }
 
@@ -928,6 +941,14 @@ export async function readTodoSettings(todosDir: string): Promise<TodoSettings> 
 	}
 
 	return normalizeTodoSettings(data);
+}
+
+export async function writeTodoSettings(todosDir: string, settings: TodoSettings): Promise<void> {
+	await fs.writeFile(
+		getTodoSettingsPath(todosDir),
+		JSON.stringify(settings, null, 2) + "\n",
+		"utf8",
+	);
 }
 
 export async function garbageCollectTodos(todosDir: string, settings: TodoSettings): Promise<void> {
@@ -1246,6 +1267,8 @@ function findJsonObjectEnd(content: string): number {
 
 function splitFrontMatter(content: string): { frontMatter: string; body: string } {
 	if (!content.startsWith("{")) {
+		const footer = splitFooterMatter(content);
+		if (footer) return footer;
 		return { frontMatter: "", body: content };
 	}
 
@@ -1257,6 +1280,60 @@ function splitFrontMatter(content: string): { frontMatter: string; body: string 
 	const frontMatter = content.slice(0, endIndex + 1);
 	const body = content.slice(endIndex + 1).replace(/^\r?\n+/, "");
 	return { frontMatter, body };
+}
+
+/**
+ * Detect the footer layout — markdown body, then a `---` separator line,
+ * then the JSON metadata:
+ *
+ * ```
+ * # Title
+ *
+ * body text
+ *
+ * ---
+ * { "id": ... }
+ * ```
+ *
+ * The separator must be the last `---` line in the file and everything
+ * after it must be a single complete, parseable JSON object; otherwise the
+ * whole content is treated as body (a body that merely ends with `---` and
+ * prose is unaffected).
+ */
+function splitFooterMatter(
+	content: string,
+): { frontMatter: string; body: string } | null {
+	const trimmed = content.replace(/\s+$/, "");
+	// Prepend a newline so a file that starts with the separator is found.
+	const haystack = `\n${trimmed}`;
+	let sepIndex = haystack.lastIndexOf("\n---");
+	while (sepIndex !== -1) {
+		const after = sepIndex + 4;
+		// The separator must be a full line: exactly "---" and nothing else.
+		if (after === haystack.length || haystack[after] === "\n") {
+			const meta = trimmed.slice(after - 1).trim();
+			if (
+				meta.startsWith("{") &&
+				findJsonObjectEnd(meta) === meta.length - 1 &&
+				safeJsonParse(meta) !== undefined
+			) {
+				const body = trimmed
+					.slice(0, Math.max(sepIndex - 1, 0))
+					.replace(/\s+$/, "");
+				return { frontMatter: meta, body };
+			}
+		}
+		sepIndex = haystack.lastIndexOf("\n---", sepIndex - 1);
+	}
+	return null;
+}
+
+function safeJsonParse(text: string): unknown | undefined {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return undefined;
+	}
 }
 
 function parseTodoContent(content: string, idFallback: string): TodoRecord {
@@ -1278,7 +1355,7 @@ function parseTodoContent(content: string, idFallback: string): TodoRecord {
 	};
 }
 
-function serializeTodo(todo: TodoRecord): string {
+function serializeTodo(todo: TodoRecord, layout: TodoLayout = "frontmatter"): string {
 	const frontMatter = JSON.stringify(
 		{
 			id: todo.id,
@@ -1299,6 +1376,12 @@ function serializeTodo(todo: TodoRecord): string {
 
 	const body = todo.body ?? "";
 	const trimmedBody = body.replace(/^\n+/, "").replace(/\s+$/, "");
+	if (layout === "footer") {
+		// Markdown first, machine metadata tucked at the bottom after a
+		// `---` separator — the mirror image of the frontmatter layout.
+		if (!trimmedBody) return `---\n${frontMatter}\n`;
+		return `${trimmedBody}\n\n---\n${frontMatter}\n`;
+	}
 	if (!trimmedBody) return `${frontMatter}\n`;
 	return `${frontMatter}\n\n${trimmedBody}\n`;
 }
@@ -1312,8 +1395,23 @@ async function readTodoFile(filePath: string, idFallback: string): Promise<TodoR
 	return parseTodoContent(content, idFallback);
 }
 
-export async function writeTodoFile(filePath: string, todo: TodoRecord) {
-	await fs.writeFile(filePath, serializeTodo(todo), "utf8");
+export async function writeTodoFile(
+	filePath: string,
+	todo: TodoRecord,
+	layout?: TodoLayout,
+) {
+	// Layout comes from the directory's settings.json unless the caller
+	// pins one (the layout migration does). Archived files live one level
+	// down; their settings still live in the todos root.
+	const resolved =
+		layout ??
+		(await readTodoSettings(settingsDirForFile(filePath))).layout;
+	await fs.writeFile(filePath, serializeTodo(todo, resolved), "utf8");
+}
+
+function settingsDirForFile(filePath: string): string {
+	const dir = path.dirname(path.resolve(filePath));
+	return path.basename(dir) === TODO_ARCHIVE_DIR_NAME ? path.dirname(dir) : dir;
 }
 
 export async function generateTodoId(todosDir: string): Promise<string> {

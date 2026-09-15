@@ -1012,6 +1012,94 @@ section "--no-gc"
 out="$(pearls --no-gc list)"
 assert_contains "$out" "Open todos" "--no-gc still produces output"
 
+section "layout migration (frontmatter <-> footer)"
+# Layout = where the JSON metadata block lives. Default is frontmatter
+# (JSON at the top); 'migrate-layout --to footer' moves it below a ---
+# separator at the end of the file. Reading always supports both.
+LAYOUT_ID="$(pearls create 'Footer experiment' --body 'Body line one' | extract_id)"
+LAYOUT_FILE="$(pearls path "$LAYOUT_ID")"
+
+head -c 1 "$LAYOUT_FILE" | grep -q '{' \
+	&& pass "default layout puts JSON at the top" \
+	|| fail "default layout puts JSON at the top"
+
+out="$(pearls migrate-layout --dry-run --to footer)"
+assert_contains "$out" "would rewrite" "dry run reports planned rewrites"
+assert_contains "$out" "settings.json layout would become" "dry run reports settings change"
+head -c 1 "$LAYOUT_FILE" | grep -q '{' \
+	&& pass "dry run leaves files untouched" \
+	|| fail "dry run leaves files untouched"
+
+assert_status 2 "missing --to exits 2" pearls migrate-layout
+assert_status 2 "invalid --to exits 2" pearls migrate-layout --to sideways
+
+out="$(pearls migrate-layout --to footer)"
+assert_contains "$out" "file(s) to footer" "migration rewrites the files"
+assert_contains "$out" 'settings.json layout set to "footer"' "migration reports settings change"
+assert_contains "$(head -1 "$LAYOUT_FILE")" "# Footer experiment" \
+	"footer layout puts markdown body first"
+grep -q '"slug": "footer-experiment"' "$LAYOUT_FILE" \
+	&& pass "footer layout ends with the JSON metadata" \
+	|| fail "footer layout ends with the JSON metadata"
+grep -qx -- '---' "$LAYOUT_FILE" \
+	&& pass "footer layout has a --- separator line" \
+	|| fail "footer layout has a --- separator line"
+
+# Data must round-trip through the migration unchanged.
+assert_contains "$(pearls get "$LAYOUT_ID" --json)" '"title": "Footer experiment"' \
+	"get still resolves after footer migration"
+assert_contains "$(pearls list)" "Footer experiment" "list still shows footer-layout todo"
+
+# Backward compatibility: a file still in the old frontmatter layout is
+# read fine while the directory is in footer mode.
+cat > "$PEARLS_DIR/T0badf00d-old-layout.md" <<'OLDFM'
+{
+  "id": "0badf00d",
+  "title": "Frontmatter relic",
+  "tags": [],
+  "status": "open",
+  "created_at": "2026-01-01T00:00:00.000Z",
+  "slug": "old-layout"
+}
+
+# Frontmatter relic
+OLDFM
+assert_contains "$(pearls get 0badf00d --json)" '"title": "Frontmatter relic"' \
+	"frontmatter file readable in footer mode"
+assert_contains "$(pearls list)" "Frontmatter relic" "mixed layouts list together"
+
+# Ordinary writes honor the settings.json layout.
+pearls update "$LAYOUT_ID" --title 'Footer experiment renamed' >/dev/null
+pearls append "$LAYOUT_ID" --body 'Body line two' >/dev/null
+pearls create 'Born in footer mode' >/dev/null
+BORN_FILE="$(ls "$PEARLS_DIR"/T*-born-in-footer-mode.md)"
+assert_contains "$(head -1 "$BORN_FILE")" "# Born in footer mode" \
+	"create writes footer layout after migration"
+assert_contains "$(head -1 "$LAYOUT_FILE")" "# Footer experiment" \
+	"update/append preserve footer layout"
+assert_contains "$(pearls get "$LAYOUT_ID" --json)" 'Body line two' \
+	"append lands in the body above the footer metadata"
+
+# A body that itself contains a --- line must not confuse the parser.
+# A body that itself contains a --- line must not confuse the parser.
+printf 'intro\n\n---\n\nnot metadata\n' > "$WORK/weird-body.md"
+WEIRD_ID="$(pearls create 'Weird dashes' --body-file "$WORK/weird-body.md" | extract_id)"
+assert_contains "$(pearls get "$WEIRD_ID" --json)" 'not metadata' \
+	"body containing --- stays intact in footer mode"
+
+# And back to frontmatter.
+out="$(pearls migrate-layout --to frontmatter)"
+assert_contains "$out" "settings.json layout set to \"frontmatter\"" "migration back reports settings change"
+head -c 1 "$LAYOUT_FILE" | grep -q '{' \
+	&& pass "migrate back restores JSON-at-top layout" \
+	|| fail "migrate back restores JSON-at-top layout"
+assert_contains "$(pearls get "$LAYOUT_ID" --json)" 'Body line two' \
+	"body survives the round trip"
+out="$(pearls migrate-layout --to frontmatter --dry-run)"
+assert_contains "$out" "would rewrite 0 file(s)" "second layout migration is a no-op"
+assert_contains "$(cat "$PEARLS_DIR/settings.json")" '"layout": "frontmatter"' \
+	"settings.json carries the layout key"
+
 section "completions"
 out="$(pearls completions zsh)"
 assert_contains "$out" "#compdef pearls" "completions zsh prints a zsh completion script"

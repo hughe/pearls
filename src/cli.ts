@@ -1,20 +1,24 @@
 #!/usr/bin/env node
 /**
- * pearls — an agent-friendly CLI wrapper around Armin Ronacher's `todos.ts`.
+ * pearls — an agent-friendly CLI wrapper around the pearls extension
+ * (`extensions/pearls.ts`, seeded from Armin Ronacher's `todos.ts` and
+ * since made our own).
  *
  * The CLI is deliberately agent-agnostic: any tool that can run a shell
  * command (Claude Code, Cursor, Aider, Codex, a plain bash agent, a human)
  * can manage todos through pearls. If Pi happens to be running too, its
- * `/todos` UI operates on the same files, but pearls does not depend on
+ * `/pearls` UI operates on the same files, but pearls does not depend on
  * Pi being present at runtime.
  *
- * Storage is 100% compatible with `extensions/todo.ts`: both read and write
- * the same `.pi/pearls/<id>.md` files with JSON front matter, honour
- * `PI_TODO_PATH`, respect lock files, and share a settings.json.
+ * Storage is handled entirely by `extensions/pearls.ts`: both sides read
+ * and write the same `.pi/pearls/<id>.md` files — in either metadata
+ * layout (JSON at the top, or footer) — honour PEARLS_DIR, respect lock
+ * files, and share a settings.json.
  *
  * Every operation here is implemented by calling a function that already
- * exists in todo.ts — no business logic is reimplemented. The CLI only
- * parses args, constructs a stub ExtensionContext, and formats output.
+ * exists in the extension — no business logic is reimplemented. The CLI
+ * only parses args, constructs a stub ExtensionContext, and formats
+ * output.
  */
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -53,9 +57,11 @@ import {
 	withTodoLock,
 	writeTodoFile,
 	type TodoFrontMatter,
+	type TodoLayout,
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { migrateTodoFilenames } from "./migrate-filenames.js";
+import { migrateTodoLayout } from "./migrate-layout.js";
 import { ZSH_COMPLETION } from "./completions.js";
 import { endOutput, initPager, out, pagerActive } from "./output.js";
 import {
@@ -129,6 +135,7 @@ const KNOWN_STRING_FLAGS = new Set([
 	"child-of",
 	"type",
 	"slug",
+	"to",
 ]);
 
 // Short flags that take a value, mapped to their long-form key.
@@ -452,6 +459,13 @@ COMMANDS
                          A legacy .pi/todos directory is moved to .pi/pearls.
                          --dry-run to preview, --force to disambiguate a
                          name that is already taken.
+  migrate-layout        Move the JSON metadata block of every pearl to the
+                         top (frontmatter, default) or the bottom (footer,
+                         after a --- separator). Takes --to <frontmatter|
+                         footer> (required) and --dry-run. Also sets the
+                         layout in settings.json so future writes match.
+                         Both layouts are always readable, so pearls keeps
+                         working during and after the switch.
   summarize-memories   List memory index (title + ID only, no bodies).
                          --closed to include closed/stale memories.
                          Use --json for machine-readable output.
@@ -489,6 +503,7 @@ EXAMPLES
   pearls close Tdeadbeef
   pearls create "Long title here" --slug short-name
   pearls migrate-filenames --dry-run
+  pearls migrate-layout --to footer   # markdown first, JSON at the bottom
   PI_TODO_PATH=./todos pearls list
 `;
 
@@ -554,6 +569,13 @@ IDS AND FILENAMES
   'pearls reslug <id>' or 'pearls update <id> --slug <text>' for that).
   Files named <hex>.md predate this scheme, still work, and can be
   converted with 'pearls migrate-filenames'.
+
+FILE LAYOUT
+  Each pearl is a markdown file with a JSON metadata block. By default the
+  JSON sits at the top; 'pearls migrate-layout --to footer' moves it to the
+  bottom, after a --- separator, so the human-readable text comes first.
+  Both layouts are always readable and can be mixed freely; the command
+  rewrites every pearl and updates settings.json so future writes match.
 
 ARCHIVE
   Closed todos older than gcDays are moved to .pi/pearls/archive rather
@@ -712,6 +734,8 @@ async function main(argv: string[]): Promise<void> {
 			return await cmdReslug(run);
 		case "migrate-filenames":
 			return await cmdMigrateFilenames(run);
+	case "migrate-layout":
+			return await cmdMigrateLayout(run);
 	case "summarize-memories":
 			return await cmdSummarizeMemories(run);
 		case "refine":
@@ -1120,6 +1144,52 @@ async function cmdMigrateFilenames(run: RunContext): Promise<void> {
 		out(
 			`${verb} ${result.renamed.length} file(s), ${result.unchanged} already current\n`,
 		);
+	}
+
+	for (const err of result.errors) {
+		process.stderr.write(`pearls: ${err}\n`);
+	}
+	if (result.errors.length > 0) process.exitCode = 1;
+}
+
+// ---- migrate-layout -----------------------------------------------------
+
+function getLayoutTarget(flags: Record<string, string | boolean>): TodoLayout {
+	const raw = flags.to ?? flags.layout;
+	if (raw !== "footer" && raw !== "frontmatter") {
+		throw new CliError(
+			"migrate-layout requires --to <frontmatter|footer>",
+		);
+	}
+	return raw;
+}
+
+async function cmdMigrateLayout(run: RunContext): Promise<void> {
+	const to = getLayoutTarget(run.flags);
+	const result = await migrateTodoLayout({
+		todosDir: run.todosDir,
+		ctx: run.ctx,
+		to,
+		dryRun: Boolean(run.flags["dry-run"]),
+	});
+
+	if (run.json) {
+		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+	} else {
+		const verb = run.flags["dry-run"] ? "would rewrite" : "rewrote";
+		for (const entry of result.migrated) {
+			const where = entry.archived ? " (archive)" : "";
+			out(`${entry.file}${where}\n`);
+		}
+		out(
+			`${verb} ${result.migrated.length} file(s) to ${to}, ` +
+			`${result.unchanged} already ${to}\n`,
+		);
+		if (run.flags["dry-run"]) {
+			out(`settings.json layout would become "${to}"\n`);
+		} else {
+			out(`settings.json layout set to "${to}"\n`);
+		}
 	}
 
 	for (const err of result.errors) {

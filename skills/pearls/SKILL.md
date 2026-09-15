@@ -51,6 +51,7 @@ When the user asks you to remember something:
 | Claim a task | `pearls claim <id> --json` |
 | Release a task | `pearls release <id> --json` |
 | Delete a task | `pearls delete <id> --json` |
+| Change file layout | `pearls migrate-layout --to footer` (or `frontmatter`; rewrites all pearls) |
 | Rename a task's file | `pearls reslug <id>` |
 | Refine a task | `pearls refine <id> --json` |
 | Create a memory | `pearls create "Title" --type memory --json --body "Full text"` |
@@ -72,6 +73,12 @@ type and the slug just makes the directory readable, derived from the title
 the file — run `pearls reslug <id>` if the user wants the filename to catch
 up. Closed todos that age out are moved to `.pi/pearls/archive/` rather than
 deleted; `pearls list-all --archived` includes them.
+
+Each pearl file is markdown plus a JSON metadata block. The block lives at
+the top (frontmatter, the default) or at the bottom after a `---` separator
+(footer); both layouts are always readable and may be mixed, and
+`pearls migrate-layout --to <frontmatter|footer>` rewrites every pearl and
+updates `settings.json` so future writes match.
 
 ## Workflow
 

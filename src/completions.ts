@@ -76,6 +76,7 @@ _pearls() {
 		'path:print the path to a todo file'
 		'reslug:re-derive the filename slug from the title'
 		'migrate-filenames:rename old todo files to the current scheme'
+		'migrate-layout:move JSON metadata to top or bottom of files'
 		'summarize-memories:list the memory index'
 		'refine:print a refinement prompt for a todo'
 		'quickstart:print an agent-oriented guide'
@@ -182,6 +183,12 @@ _pearls() {
 					_arguments \\
 						'--dry-run[preview renames without applying]' \\
 						'--force[disambiguate an already-taken name]'
+					;;
+				migrate-layout)
+					_arguments \\
+						'--to[target layout]:layout:(frontmatter footer)' \\
+						'--dry-run[preview rewrites without applying]' \\
+						'--json[emit stable JSON output]'
 					;;
 				summarize-memories)
 					_arguments \\

@@ -1,13 +1,15 @@
 /**
- * Typed re-export bridge to the Pi todo extension.
+ * Typed re-export bridge to the pearls extension.
  *
  * The CLI imports all todo storage/logic functions from this module. The
- * real implementation lives in ../extensions/pearls.ts (a verbatim copy of
- * the Pi extension, marked `@ts-nocheck` so pearls doesn't attempt to
- * type-check upstream code). Here we describe the subset of exports the
- * CLI uses with pearls-local types — in particular a narrowed
- * CliExtensionContextLike that only declares the fields todo.ts actually
- * reads when driven from the CLI (no UI, stub session manager).
+ * real implementation lives in ../extensions/pearls.ts (seeded from
+ * Armin Ronacher's `todos.ts` and now maintained as pearls' own — it is
+ * the canonical implementation, not a mirror of anything), marked
+ * `@ts-nocheck` so pearls doesn't attempt to type-check upstream code.
+ * Here we describe the subset of exports the CLI uses with pearls-local
+ * types — in particular a narrowed CliExtensionContextLike that only
+ * declares the fields the extension actually reads when driven from the
+ * CLI (no UI, stub session manager).
  *
  * No behaviour is added or changed; everything is a straight re-export of
  * a function that already exists in extensions/pearls.ts.
@@ -15,6 +17,8 @@
 import * as todo from "../extensions/pearls.js";
 
 export type TodoType = "todo" | "memory";
+
+export type TodoLayout = "frontmatter" | "footer";
 
 export interface TodoFrontMatter {
 	id: string;
@@ -87,10 +91,15 @@ export interface TodoSettings {
 	gc: boolean;
 	gcDays: number;
 	archive: boolean;
+	layout: TodoLayout;
 }
 export const readTodoSettings: (
 	todosDir: string,
 ) => Promise<TodoSettings> = todo.readTodoSettings;
+export const writeTodoSettings: (
+	todosDir: string,
+	settings: TodoSettings,
+) => Promise<void> = todo.writeTodoSettings;
 export const garbageCollectTodos: (
 	todosDir: string,
 	settings: TodoSettings,
@@ -99,6 +108,7 @@ export const garbageCollectTodos: (
 export const writeTodoFile: (
 	filePath: string,
 	t: TodoRecord,
+	layout?: TodoLayout,
 ) => Promise<void> = todo.writeTodoFile;
 export const generateTodoId: (todosDir: string) => Promise<string> =
 	todo.generateTodoId;
