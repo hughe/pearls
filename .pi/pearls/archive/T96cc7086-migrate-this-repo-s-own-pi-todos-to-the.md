@@ -1,17 +1,3 @@
-{
-  "id": "96cc7086",
-  "title": "Migrate this repo's own .pi/todos to the new scheme",
-  "tags": [
-    "migration"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:50:00.427Z",
-  "priority": 3,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:35:04.308Z",
-  "slug": "migrate-this-repo-s-own-pi-todos-to-the"
-}
-
 # Migrate this repo's own .pi/todos to the new scheme
 
 ## Description
@@ -52,3 +38,18 @@ effect of someone running `pearls list`.
 renames), then GC was re-enabled in a labelled commit, which archived 26
 finished pearls into `.pi/todos/archive/`. The backlog directory now holds
 only this epic's ten open pearls plus one open memory.
+
+---
+{
+  "id": "96cc7086",
+  "title": "Migrate this repo's own .pi/todos to the new scheme",
+  "tags": [
+    "migration"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:50:00.427Z",
+  "priority": 3,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:35:04.308Z",
+  "slug": "migrate-this-repo-s-own-pi-todos-to-the"
+}

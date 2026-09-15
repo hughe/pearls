@@ -1,3 +1,8 @@
+# T3
+
+## Description
+
+---
 {
   "id": "0ae639de",
   "title": "T3",
@@ -8,7 +13,3 @@
   "closed_at": "2026-05-02T19:27:59.833Z",
   "slug": "t3"
 }
-
-# T3
-
-## Description

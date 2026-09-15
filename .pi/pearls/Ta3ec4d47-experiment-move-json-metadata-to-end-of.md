@@ -1,16 +1,3 @@
-{
-  "id": "a3ec4d47",
-  "title": "Experiment: move JSON metadata to end of item files (footer instead of frontmatter)",
-  "tags": [
-    "experimental",
-    "format"
-  ],
-  "status": "closed",
-  "created_at": "2026-09-15T15:01:34.416Z",
-  "priority": 2,
-  "slug": "experiment-move-json-metadata-to-end-of"
-}
-
 # Experiment: Move JSON metadata to end of item files
 
 ## Description
@@ -57,3 +44,17 @@ Footer layout is intentionally experimental: the upstream Pi `todo` extension on
 ## Correction (2026-09-15, later)
 
 The "Caveat" above was based on a wrong assumption. There is no upstream to stay compatible with: `extensions/pearls.ts` was seeded from mitsuhiko's `todos.ts` but is pearls' own canonical implementation — it is what both the CLI and Pi's `/pearls` UI load, and it will never flow back upstream. So the footer layout is safe to use everywhere; both layouts are fully supported by the one reader that exists. Docs (README intro, CLI header, wrapper header) were updated to reflect that `extensions/pearls.ts` is maintained as pearls' own code, and the upstream-compat caveat was removed. 269/269 tests still pass.
+
+---
+{
+  "id": "a3ec4d47",
+  "title": "Experiment: move JSON metadata to end of item files (footer instead of frontmatter)",
+  "tags": [
+    "experimental",
+    "format"
+  ],
+  "status": "closed",
+  "created_at": "2026-09-15T15:01:34.416Z",
+  "priority": 2,
+  "slug": "experiment-move-json-metadata-to-end-of"
+}

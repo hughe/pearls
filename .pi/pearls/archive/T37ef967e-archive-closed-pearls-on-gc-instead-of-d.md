@@ -1,18 +1,3 @@
-{
-  "id": "37ef967e",
-  "title": "Archive closed pearls on GC instead of deleting them",
-  "tags": [
-    "archive",
-    "gc"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:49:26.455Z",
-  "priority": 1,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:54.027Z",
-  "slug": "archive-closed-pearls-on-gc-instead-of-d"
-}
-
 # Archive closed pearls on GC instead of deleting them
 
 ## Description
@@ -82,3 +67,19 @@ One change from the plan: a file already named `T<hex>-<slug>.md` keeps its
 name when archived — archiving is not the moment to renumber someone's
 filenames. Only legacy `<hex>.md` names are normalised on the way in, so
 the archive never needs migrating itself.
+
+---
+{
+  "id": "37ef967e",
+  "title": "Archive closed pearls on GC instead of deleting them",
+  "tags": [
+    "archive",
+    "gc"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:49:26.455Z",
+  "priority": 1,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:54.027Z",
+  "slug": "archive-closed-pearls-on-gc-instead-of-d"
+}

@@ -1,3 +1,10 @@
+# TUI: Ctrl+Shift+M filter toggle for memories in /pearls
+
+## Description
+
+Add a filter toggle to the /pearls TUI selector. `Ctrl+Shift+M` switches between showing todos and memories. Default view shows todos. Toggling shows memories with the same search/select UX. Update the header to indicate which view is active (e.g. 'Todos' vs 'Memories').
+
+---
 {
   "id": "b673a17d",
   "title": "TUI: Ctrl+Shift+M filter toggle for memories in /pearls",
@@ -11,9 +18,3 @@
   "parent": "b286d44d",
   "slug": "tui-ctrl-shift-m-filter-toggle-for-memor"
 }
-
-# TUI: Ctrl+Shift+M filter toggle for memories in /pearls
-
-## Description
-
-Add a filter toggle to the /pearls TUI selector. `Ctrl+Shift+M` switches between showing todos and memories. Default view shows todos. Toggling shows memories with the same search/select UX. Update the header to indicate which view is active (e.g. 'Todos' vs 'Memories').

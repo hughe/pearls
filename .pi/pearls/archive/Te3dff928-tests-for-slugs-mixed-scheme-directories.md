@@ -1,17 +1,3 @@
-{
-  "id": "e3dff928",
-  "title": "Tests for slugs, mixed-scheme directories, migration and archiving",
-  "tags": [
-    "tests"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:49:55.199Z",
-  "priority": 2,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:59.232Z",
-  "slug": "tests-for-slugs-mixed-scheme-directories"
-}
-
 # Tests for slugs, mixed-scheme directories, migration and archiving
 
 ## Description
@@ -76,3 +62,18 @@ main. Its fixture uses fixed 2026-04 dates, so the imported closed issue is
 now past gcDays and GC deleted it before the assertions ran — verified
 against origin/main in a scratch worktree. That section now passes
 `--no-gc`.
+
+---
+{
+  "id": "e3dff928",
+  "title": "Tests for slugs, mixed-scheme directories, migration and archiving",
+  "tags": [
+    "tests"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:49:55.199Z",
+  "priority": 2,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:59.232Z",
+  "slug": "tests-for-slugs-mixed-scheme-directories"
+}

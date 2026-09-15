@@ -1,12 +1,3 @@
-{
-  "id": "cd9167e0",
-  "title": "Colorize pearls list when stdout is a terminal",
-  "tags": [],
-  "status": "closed",
-  "created_at": "2026-08-30T22:20:16.331Z",
-  "slug": "colorize-pearls-list-when-stdout-is-a-te"
-}
-
 # Colorize pearls list when stdout is a terminal
 
 ## Description
@@ -22,3 +13,13 @@
 Palette revision: pearl ids changed from yellow to **bold (no color)** — ids stand out by weight, so they can't clash with the priority colors. Closed ids are dim-bold. Tests updated accordingly.
 
 Final palette: ids are **gray** (quiet chrome; tried bold first, user preferred gray). Closed ids are dim-gray.
+
+---
+{
+  "id": "cd9167e0",
+  "title": "Colorize pearls list when stdout is a terminal",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2026-08-30T22:20:16.331Z",
+  "slug": "colorize-pearls-list-when-stdout-is-a-te"
+}

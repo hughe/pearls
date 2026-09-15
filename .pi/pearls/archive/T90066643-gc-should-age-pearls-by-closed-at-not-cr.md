@@ -1,19 +1,3 @@
-{
-  "id": "90066643",
-  "title": "GC should age pearls by closed_at, not created_at",
-  "tags": [
-    "archive",
-    "gc",
-    "bug"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:58:40.498Z",
-  "priority": 1,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:56.570Z",
-  "slug": "gc-should-age-pearls-by-closed-at-not-cr"
-}
-
 # GC should age pearls by closed_at, not created_at
 
 ## Description
@@ -59,3 +43,20 @@ GC now ages from `closed_at`, falling back to `created_at` when it is
 absent. Covered by tests: a pearl created in 2020 but closed today
 survives; one closed in 2020 is archived; one closed with no `closed_at`
 falls back and is archived.
+
+---
+{
+  "id": "90066643",
+  "title": "GC should age pearls by closed_at, not created_at",
+  "tags": [
+    "archive",
+    "gc",
+    "bug"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:58:40.498Z",
+  "priority": 1,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:56.570Z",
+  "slug": "gc-should-age-pearls-by-closed-at-not-cr"
+}

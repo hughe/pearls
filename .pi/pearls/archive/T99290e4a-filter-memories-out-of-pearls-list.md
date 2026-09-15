@@ -1,3 +1,10 @@
+# Filter memories out of pearls list
+
+## Description
+
+Update `listTodos` and `pearls list` to exclude entries where `type: Memory`. Memories should not appear in the default todo list. This applies to both the CLI and the agent tool output.
+
+---
 {
   "id": "99290e4a",
   "title": "Filter memories out of pearls list",
@@ -10,9 +17,3 @@
   "parent": "b286d44d",
   "slug": "filter-memories-out-of-pearls-list"
 }
-
-# Filter memories out of pearls list
-
-## Description
-
-Update `listTodos` and `pearls list` to exclude entries where `type: Memory`. Memories should not appear in the default todo list. This applies to both the CLI and the agent tool output.

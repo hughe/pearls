@@ -1,15 +1,3 @@
-{
-  "id": "be25071f",
-  "title": "Add a few tests for CLI argument parsing and round-trip through todo.ts storage",
-  "tags": [
-    "cli",
-    "tests"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-26T23:54:08.585Z",
-  "slug": "add-a-few-tests-for-cli-argument-parsing"
-}
-
 ## Done
 
 Added two new test sections in `test/cli.sh` (132 → 168 checks):
@@ -32,3 +20,16 @@ Added two new test sections in `test/cli.sh` (132 → 168 checks):
 - Claim/release assignment round-trip
 
 PR: https://github.com/hughe/pearls/pull/10
+
+---
+{
+  "id": "be25071f",
+  "title": "Add a few tests for CLI argument parsing and round-trip through todo.ts storage",
+  "tags": [
+    "cli",
+    "tests"
+  ],
+  "status": "closed",
+  "created_at": "2026-04-26T23:54:08.585Z",
+  "slug": "add-a-few-tests-for-cli-argument-parsing"
+}

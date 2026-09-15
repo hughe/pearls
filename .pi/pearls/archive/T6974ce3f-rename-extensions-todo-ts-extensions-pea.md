@@ -1,17 +1,3 @@
-{
-  "id": "6974ce3f",
-  "title": "Rename extensions/todo.ts → extensions/pearls.ts, update imports & docs",
-  "tags": [
-    "refactor",
-    "cli",
-    "docs"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-28T15:58:02.706Z",
-  "priority": 1,
-  "slug": "rename-extensions-todo-ts-extensions-pea"
-}
-
 ## Goal
 Rename `extensions/todo.ts` to `extensions/pearls.ts` so the vendored extension file matches the project name, and update everything that references it.
 
@@ -35,3 +21,18 @@ Rename `extensions/todo.ts` to `extensions/pearls.ts` so the vendored extension 
 - `AGENTS.md` (historical context)
 - `src/cli.ts` header comment (upstream provenance)
 - User-visible strings: `.pi/todos/`, `TODO-` prefix, `PI_TODO_PATH`
+
+---
+{
+  "id": "6974ce3f",
+  "title": "Rename extensions/todo.ts → extensions/pearls.ts, update imports & docs",
+  "tags": [
+    "refactor",
+    "cli",
+    "docs"
+  ],
+  "status": "closed",
+  "created_at": "2026-04-28T15:58:02.706Z",
+  "priority": 1,
+  "slug": "rename-extensions-todo-ts-extensions-pea"
+}

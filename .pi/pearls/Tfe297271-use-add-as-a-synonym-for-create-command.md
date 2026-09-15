@@ -1,3 +1,8 @@
+# Use "add" as a synonym for "create" command
+
+## Description
+
+---
 {
   "id": "fe297271",
   "title": "Use \"add\" as a synonym for \"create\" command",
@@ -7,7 +12,3 @@
   "priority": 2,
   "slug": "use-add-as-a-synonym-for-create-command"
 }
-
-# Use "add" as a synonym for "create" command
-
-## Description

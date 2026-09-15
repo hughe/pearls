@@ -1,3 +1,10 @@
+# Important project context
+
+## Description
+
+The build system uses npm and the extension is in extensions/pearls.ts
+
+---
 {
   "id": "f62de4d8",
   "title": "Important project context",
@@ -7,9 +14,3 @@
   "type": "memory",
   "slug": "important-project-context"
 }
-
-# Important project context
-
-## Description
-
-The build system uses npm and the extension is in extensions/pearls.ts

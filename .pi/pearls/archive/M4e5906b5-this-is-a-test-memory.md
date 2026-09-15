@@ -1,3 +1,10 @@
+# this is a test memory.
+
+## Description
+
+this is a test memory.
+
+---
 {
   "id": "4e5906b5",
   "title": "this is a test memory.",
@@ -7,9 +14,3 @@
   "type": "memory",
   "slug": "this-is-a-test-memory"
 }
-
-# this is a test memory.
-
-## Description
-
-this is a test memory.

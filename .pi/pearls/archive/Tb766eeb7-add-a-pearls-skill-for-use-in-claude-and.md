@@ -1,18 +1,3 @@
-{
-  "id": "b766eeb7",
-  "title": "Add a pearls SKILL for use in Claude and other agents without plugins",
-  "tags": [
-    "skill",
-    "claude",
-    "agents",
-    "cli"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-29T18:21:02.926Z",
-  "priority": 1,
-  "slug": "add-a-pearls-skill-for-use-in-claude-and"
-}
-
 ## Goal
 
 Create an **Agent Skills**–compatible `SKILL.md` at `skills/pearls/SKILL.md` so that any agent (Claude Code, Cursor, Windsurf, etc.) that supports the [Agent Skills specification](https://agentskills.io/specification) can drive pearls without a plugin.
@@ -64,3 +49,19 @@ skills/
     └── references/
         └── CLI.md        # Optional: full CLI reference (flags, examples)
 ```
+
+---
+{
+  "id": "b766eeb7",
+  "title": "Add a pearls SKILL for use in Claude and other agents without plugins",
+  "tags": [
+    "skill",
+    "claude",
+    "agents",
+    "cli"
+  ],
+  "status": "closed",
+  "created_at": "2026-04-29T18:21:02.926Z",
+  "priority": 1,
+  "slug": "add-a-pearls-skill-for-use-in-claude-and"
+}

@@ -1,19 +1,3 @@
-{
-  "id": "cec97615",
-  "title": "Epic: slug-based pearl filenames + archive instead of delete",
-  "tags": [
-    "epic",
-    "naming",
-    "archive",
-    "cli"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:48:05.939Z",
-  "priority": 1,
-  "closed_at": "2026-08-13T22:35:06.850Z",
-  "slug": "epic-slug-based-pearl-filenames-archive"
-}
-
 # Epic: slug-based pearl filenames + archive instead of delete
 
 ## Description
@@ -106,3 +90,20 @@ Until both land, use `--no-gc` when driving pearls in this repo.
 1 and 2 are independent of each other; 3 needs both. 5 and 6 are
 independent of 1-4 and should land first — together they defuse the
 deletion hazard above.
+
+---
+{
+  "id": "cec97615",
+  "title": "Epic: slug-based pearl filenames + archive instead of delete",
+  "tags": [
+    "epic",
+    "naming",
+    "archive",
+    "cli"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:48:05.939Z",
+  "priority": 1,
+  "closed_at": "2026-08-13T22:35:06.850Z",
+  "slug": "epic-slug-based-pearl-filenames-archive"
+}

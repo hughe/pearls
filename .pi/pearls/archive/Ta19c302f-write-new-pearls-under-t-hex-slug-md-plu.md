@@ -1,18 +1,3 @@
-{
-  "id": "a19c302f",
-  "title": "Write new pearls under T<hex>-<slug>.md, plus a reslug command",
-  "tags": [
-    "naming",
-    "cli"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:49:21.021Z",
-  "priority": 1,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:48.872Z",
-  "slug": "write-new-pearls-under-t-hex-slug-md-plu"
-}
-
 # Write new pearls under T<hex>-<slug>.md, plus a reslug command
 
 ## Description
@@ -62,3 +47,19 @@ the name untouched, and `reslug` moves it.
 `reslug <id>` rename inside the lock; `update --title` deliberately does
 not. Verified: retitling leaves the filename alone, `reslug` picks up the
 new title, and `--slug` overrides both.
+
+---
+{
+  "id": "a19c302f",
+  "title": "Write new pearls under T<hex>-<slug>.md, plus a reslug command",
+  "tags": [
+    "naming",
+    "cli"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:49:21.021Z",
+  "priority": 1,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:48.872Z",
+  "slug": "write-new-pearls-under-t-hex-slug-md-plu"
+}

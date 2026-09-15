@@ -1,18 +1,3 @@
-{
-  "id": "4d67b5a7",
-  "title": "Decouple id from filename: path resolver over the todos directory",
-  "tags": [
-    "naming",
-    "refactor"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:48:39.004Z",
-  "priority": 1,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:46.182Z",
-  "slug": "decouple-id-from-filename-path-resolver"
-}
-
 # Decouple id from filename: path resolver over the todos directory
 
 ## Description
@@ -79,3 +64,19 @@ changes at all — only the five creation sites did.
 Deviation from the plan: no readdir cache. The directory is small, the CLI
 is one-shot, and an invalidation bug would be worse than the scan. Worth
 revisiting only if the Pi TUI shows up slow on a large backlog.
+
+---
+{
+  "id": "4d67b5a7",
+  "title": "Decouple id from filename: path resolver over the todos directory",
+  "tags": [
+    "naming",
+    "refactor"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:48:39.004Z",
+  "priority": 1,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:34:46.182Z",
+  "slug": "decouple-id-from-filename-path-resolver"
+}

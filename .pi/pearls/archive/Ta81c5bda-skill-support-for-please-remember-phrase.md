@@ -1,3 +1,10 @@
+# Skill support for 'Please remember …' phrases
+
+## Description
+
+Update the pearls skill to recognize phrases like 'Remember this' or 'Please remember …' and route them to the pearls create tool with type=Memory. Short summary goes in title, full text in body.
+
+---
 {
   "id": "a81c5bda",
   "title": "Skill support for 'Please remember …' phrases",
@@ -11,9 +18,3 @@
   "parent": "b286d44d",
   "slug": "skill-support-for-please-remember-phrase"
 }
-
-# Skill support for 'Please remember …' phrases
-
-## Description
-
-Update the pearls skill to recognize phrases like 'Remember this' or 'Please remember …' and route them to the pearls create tool with type=Memory. Short summary goes in title, full text in body.

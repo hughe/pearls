@@ -1,16 +1,3 @@
-{
-  "id": "ac3e6f2b",
-  "title": "Memory indexing on startup/compaction",
-  "tags": [
-    "memory"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-30T14:32:37.384Z",
-  "priority": 2,
-  "parent": "b286d44d",
-  "slug": "memory-indexing-on-startup-compaction"
-}
-
 # Memory indexing on startup/compaction
 
 ## Description
@@ -24,3 +11,17 @@ On agent startup or memory compaction, scan all memory files in .pi/todos/ and b
 3. **Default scope:** Open memories only. Add `--closed` flag to include closed/stale ones.
 4. **How to prime context in Pi:** Inject a persistent message via `before_agent_start` with `customType: "pearls-memory-index"` on `session_start`. On `session_compact`, re-inject a fresh copy (the old message got compacted away).
 5. **No per-turn re-injection needed:** If a memory is created during the session, the agent already knows about it. Only need to re-inject after compaction removes the index message.
+
+---
+{
+  "id": "ac3e6f2b",
+  "title": "Memory indexing on startup/compaction",
+  "tags": [
+    "memory"
+  ],
+  "status": "closed",
+  "created_at": "2026-04-30T14:32:37.384Z",
+  "priority": 2,
+  "parent": "b286d44d",
+  "slug": "memory-indexing-on-startup-compaction"
+}

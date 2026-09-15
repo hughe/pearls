@@ -1,16 +1,3 @@
-{
-  "id": "4e7534ef",
-  "title": "Find pearls directory by walking up from cwd looking for .pi/todos",
-  "tags": [
-    "cli",
-    "enhancement"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-28T20:04:59.552Z",
-  "priority": 2,
-  "slug": "find-pearls-directory-by-walking-up-from"
-}
-
 Replace the current hardcoded `<cwd>/.pi/todos` resolution in `getTodosDir()` with a walk-up search, and introduce a new `PEARLS_DIR` env var.
 
 ## Resolution priority (highest to lowest)
@@ -29,3 +16,17 @@ Apply to both the CLI (`src/cli.ts`) and the Pi extension (`extensions/pearls.ts
 - The walk-up logic belongs in `getTodosDir()` in `extensions/pearls.ts` (the CLI already delegates to this).
 - `getTodosDirLabel()` should reflect the same priority so labels shown to the user are consistent.
 - The deprecation warning for `PI_TODO_PATH` should be emitted once, at startup, before any command runs, on stderr only.
+
+---
+{
+  "id": "4e7534ef",
+  "title": "Find pearls directory by walking up from cwd looking for .pi/todos",
+  "tags": [
+    "cli",
+    "enhancement"
+  ],
+  "status": "closed",
+  "created_at": "2026-04-28T20:04:59.552Z",
+  "priority": 2,
+  "slug": "find-pearls-directory-by-walking-up-from"
+}

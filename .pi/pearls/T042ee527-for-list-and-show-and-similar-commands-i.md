@@ -1,3 +1,8 @@
+# For list and show and similar commands, if stdout is a tty then pipe the output through less
+
+## Description
+
+---
 {
   "id": "042ee527",
   "title": "For list and show and similar commands, if stdout is a tty then pipe the output through less",
@@ -7,7 +12,3 @@
   "priority": 2,
   "slug": "for-list-and-show-and-similar-commands-i"
 }
-
-# For list and show and similar commands, if stdout is a tty then pipe the output through less
-
-## Description

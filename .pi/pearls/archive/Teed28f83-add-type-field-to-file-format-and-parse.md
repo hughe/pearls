@@ -1,3 +1,10 @@
+# Add type field to file format and parse/serialize logic
+
+## Description
+
+Add a `type` field to `TodoFrontMatter` and `TodoRecord`. Default is `ToDo` (implicit, not stored in front matter). When `type: Memory`, it must be persisted in the JSON front matter. Update `parseFrontMatter`, `serializeTodo`, and all related types/functions. This is the foundation that all other memory sub-tasks depend on.
+
+---
 {
   "id": "eed28f83",
   "title": "Add type field to file format and parse/serialize logic",
@@ -10,9 +17,3 @@
   "parent": "b286d44d",
   "slug": "add-type-field-to-file-format-and-parse"
 }
-
-# Add type field to file format and parse/serialize logic
-
-## Description
-
-Add a `type` field to `TodoFrontMatter` and `TodoRecord`. Default is `ToDo` (implicit, not stored in front matter). When `type: Memory`, it must be persisted in the JSON front matter. Update `parseFrontMatter`, `serializeTodo`, and all related types/functions. This is the foundation that all other memory sub-tasks depend on.

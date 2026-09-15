@@ -1,17 +1,3 @@
-{
-  "id": "8bcb4fd8",
-  "title": "Docs: README, CLI help, quickstart and SKILL.md for the new layout",
-  "tags": [
-    "docs"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:49:57.915Z",
-  "priority": 2,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:35:01.745Z",
-  "slug": "docs-readme-cli-help-quickstart-and-skil"
-}
-
 # Docs: README, CLI help, quickstart and SKILL.md for the new layout
 
 ## Description
@@ -52,3 +38,18 @@ nobody panics at a mixed directory.
 README (storage layout, settings table, command table, ids section), CLI
 `HELP` and `QUICKSTART`, and `skills/pearls/SKILL.md` (bumped to 1.2) all
 describe the new scheme, the rename policy and the archive.
+
+---
+{
+  "id": "8bcb4fd8",
+  "title": "Docs: README, CLI help, quickstart and SKILL.md for the new layout",
+  "tags": [
+    "docs"
+  ],
+  "status": "closed",
+  "created_at": "2026-08-13T21:49:57.915Z",
+  "priority": 2,
+  "parent": "cec97615",
+  "closed_at": "2026-08-13T22:35:01.745Z",
+  "slug": "docs-readme-cli-help-quickstart-and-skil"
+}

@@ -1,3 +1,9 @@
+# Description 
+
+locks a pearl, opens a temp file containing a copy of the pearl in `$EDITOR` waits for the editor to complete and then copies 
+the file back, and removes the lock.
+
+---
 {
   "id": "046f885f",
   "title": "Add a edit option.",
@@ -6,8 +12,3 @@
   "created_at": "2026-04-27T00:46:21.751Z",
   "slug": "add-a-edit-option"
 }
-
-# Description 
-
-locks a pearl, opens a temp file containing a copy of the pearl in `$EDITOR` waits for the editor to complete and then copies 
-the file back, and removes the lock.

@@ -1,16 +1,3 @@
-{
-  "id": "b286d44d",
-  "title": "Memory facility (pearls proper)",
-  "tags": [
-    "roadmap",
-    "feature"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-26T23:54:08.983Z",
-  "priority": 2,
-  "slug": "memory-facility-pearls-proper"
-}
-
 ## Overview
 
 Add a persistent memory system to pearls, stored as first-class entities alongside todos in the same file format.
@@ -72,3 +59,17 @@ Add a persistent memory system to pearls, stored as first-class entities alongsi
 3. **`pearls memories` CLI output:** Same format as `pearls list`, just filtered to type=Memory entries.
 4. **Creation via existing `create`:** No new tool actions needed. Use `pearls create --type memory ...` on the CLI, and the existing `create` action in the tool/TUI with `type: Memory` as a parameter.
 5. **Same directory:** Memories live in `.pi/todos/` alongside todos, sharing the ID namespace. Distinguished by the `type` field in front matter.
+
+---
+{
+  "id": "b286d44d",
+  "title": "Memory facility (pearls proper)",
+  "tags": [
+    "roadmap",
+    "feature"
+  ],
+  "status": "closed",
+  "created_at": "2026-04-26T23:54:08.983Z",
+  "priority": 2,
+  "slug": "memory-facility-pearls-proper"
+}
