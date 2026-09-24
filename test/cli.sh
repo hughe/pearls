@@ -500,6 +500,19 @@ unset MDV_STUB_STATUS
 pearls view "$ID" 8080 -- -n >/dev/null 2>&1
 assert_eq "$(cat "$STUB_DIR/mdv-args")" "$FILE 8080 -n" \
 	"view passes extra args through to mdv"
+
+# mdv is an alias for view
+assert_status 2 "mdv alias rejects bad id"  pearls mdv NOT-AN-ID
+assert_status 1 "mdv alias reports missing pearl"  pearls mdv TODO-00000000
+assert_status 0 "mdv alias runs mdv and exits with its status (0)"  pearls mdv "$ID"
+assert_eq "$(cat "$STUB_DIR/mdv-args")" "$FILE" \
+	"mdv alias passes the pearl's file path to mdv"
+export MDV_STUB_STATUS=7
+assert_status 7 "mdv alias exits with mdv's status (7)"  pearls mdv "$ID"
+unset MDV_STUB_STATUS
+pearls mdv "$ID" 8080 -- -n >/dev/null 2>&1
+assert_eq "$(cat "$STUB_DIR/mdv-args")" "$FILE 8080 -n" \
+	"mdv alias passes extra args through to mdv"
 export PATH="$OLD_PATH"
 
 section "update (title + tags + body)"
@@ -637,6 +650,8 @@ section "CLI argument parsing"
 # --version
 out="$(pearls --version)"
 [[ -n "$out" ]] && pass "--version prints something" || fail "--version prints something"
+# `version` is an alias for --version
+assert_eq "$(pearls version)" "$(pearls --version)" "version matches --version"
 
 # -h is --help
 out="$(pearls -h)"
@@ -1131,6 +1146,8 @@ section "completions"
 out="$(pearls completions zsh)"
 assert_contains "$out" "#compdef pearls" "completions zsh prints a zsh completion script"
 assert_contains "$out" "list-tags" "completions zsh includes list-tags"
+assert_contains "$out" "version" "completions zsh includes version"
+assert_contains "$out" "mdv" "completions zsh includes mdv"
 assert_contains "$out" "_pearls_ids" "completions zsh completes pearl ids"
 out="$(pearls completions)"
 assert_contains "$out" "#compdef pearls" "completions defaults to zsh"

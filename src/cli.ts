@@ -458,6 +458,7 @@ COMMANDS
                          are passed to mdv (a port, or flags after -- ,
                          e.g. 'pearls view <id> -- -n' for one-shot mode).
                          Requires mdv on $PATH.
+  mdv <id> [mdv-args]    Alias for view.
   reslug <id>            Re-derive the filename slug from the todo's current
                          title and rename the file.
   migrate-filenames      Bring filenames up to date: todos still using the
@@ -480,6 +481,7 @@ COMMANDS
                          should ask the user clarifying questions before
                          rewriting the todo.
   quickstart             Print an agent-oriented guide to using pearls.
+  version                Print the pearls version (same as --version).
   completions <shell>    Print shell completion scripts to stdout. Shells:
                          zsh. Install with:
                            pearls completions zsh > "\${fpath[1]}/_pearls"
@@ -641,10 +643,12 @@ async function main(argv: string[]): Promise<void> {
 		disabled:
 			Boolean(parsed.flags.json) ||
 			Boolean(parsed.flags.version) ||
-			parsed.command === "view",
+			parsed.command === "version" ||
+			parsed.command === "view" ||
+			parsed.command === "mdv",
 	});
 
-	if (parsed.flags.version) {
+	if (parsed.flags.version || parsed.command === "version") {
 		out(VERSION + "\n");
 		await endOutput();
 		return;
@@ -745,6 +749,7 @@ async function main(argv: string[]): Promise<void> {
 		case "path":
 			return cmdPath(run);
 		case "view":
+		case "mdv":
 			return await cmdView(run);
 		case "reslug":
 			return await cmdReslug(run);

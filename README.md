@@ -136,10 +136,12 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `dir`                   | Print the resolved todos directory.                                  |
 | `path <id>`             | Print the absolute path to a todo's `.md` file.                      |
 | `view <id> [mdv-args]`  | Open the pearl in [mdv](../mdv), which renders it in your browser. pearls runs mdv in the foreground and exits with its status. Extra args after `<id>` go to mdv (a port, or flags after `--`, e.g. `-- -n` for one-shot mode). Requires `mdv` on `$PATH`. |
+| `mdv <id> [mdv-args]`   | Alias for `view`.                                                     |
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
 | `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. Also moves a legacy `.pi/todos/` directory to `.pi/pearls/`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
 | `migrate-layout`        | Move the JSON metadata block of every pearl between the two on-disk layouts: `--to frontmatter` (default: JSON at the top) or `--to footer` (markdown body first, JSON after a `---` separator at the bottom). `--dry-run` previews. Also updates `settings.json` so future writes use the chosen layout. Both layouts are always readable, so the directory keeps working during and after the switch. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
+| `version`               | Print the pearls version (same as `--version`).                       |
 | `completions <shell>`   | Print a shell completion script to stdout. Currently `zsh` (the
   default).                                                          |
 

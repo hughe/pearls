@@ -75,12 +75,14 @@ _pearls() {
 		'dir:print the resolved todos directory'
 		'path:print the path to a todo file'
 		'view:view a pearl in mdv'
+		'mdv:alias for view'
 		'reslug:re-derive the filename slug from the title'
 		'migrate-filenames:rename old todo files to the current scheme'
 		'migrate-layout:move JSON metadata to top or bottom of files'
 		'summarize-memories:list the memory index'
 		'refine:print a refinement prompt for a todo'
 		'quickstart:print an agent-oriented guide'
+		'version:print the pearls version'
 		'completions:print shell completion scripts'
 		'help:show help'
 	)
@@ -171,7 +173,7 @@ _pearls() {
 				path)
 					_arguments '1:pearl id:_pearls_ids'
 					;;
-				view)
+				view|mdv)
 					_arguments '1:pearl id:_pearls_ids' '::mdv argument'
 					;;
 				reslug)
