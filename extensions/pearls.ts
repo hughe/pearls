@@ -32,19 +32,19 @@
  * Use `/pearls` to bring up the visual todo manager or just let the LLM use them
  * naturally.
  */
-import { DynamicBorder, copyToClipboard, getMarkdownTheme, keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder, copyToClipboard, keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "@sinclair/typebox";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import crypto from "node:crypto";
+import { spawn } from "node:child_process";
 import {
 	Container,
 	type Focusable,
 	Input,
 	Key,
-	Markdown,
 	SelectList,
 	Spacer,
 	type SelectItem,
@@ -184,8 +184,6 @@ type TodoAction =
 	| "delete"
 	| "claim"
 	| "release";
-
-type TodoOverlayAction = "back" | "work";
 
 type TodoMenuAction =
 	| "work"
@@ -586,7 +584,7 @@ class TodoActionMenuComponent extends Container {
 		const closed = isTodoClosed(todo.status);
 		const title = todo.title || "(untitled)";
 		const options: SelectItem[] = [
-			{ value: "view", label: "view", description: "View todo" },
+			{ value: "view", label: "view", description: "Open in mdv (browser)" },
 			{ value: "work", label: "work", description: "Work on todo" },
 			{ value: "refine", label: "refine", description: "Refine task" },
 			...(closed
@@ -673,174 +671,6 @@ class TodoDeleteConfirmComponent extends Container {
 
 	override invalidate(): void {
 		super.invalidate();
-	}
-}
-
-class TodoDetailOverlayComponent {
-	private todo: TodoRecord;
-	private theme: Theme;
-	private tui: TUI;
-	private markdown: Markdown;
-	private scrollOffset = 0;
-	private viewHeight = 0;
-	private totalLines = 0;
-	private onAction: (action: TodoOverlayAction) => void;
-	private keybindings: KeybindingMatcher;
-
-	constructor(
-		tui: TUI,
-		theme: Theme,
-		keybindings: KeybindingMatcher,
-		todo: TodoRecord,
-		onAction: (action: TodoOverlayAction) => void,
-	) {
-		this.tui = tui;
-		this.theme = theme;
-		this.keybindings = keybindings;
-		this.todo = todo;
-		this.onAction = onAction;
-		this.markdown = new Markdown(this.getMarkdownText(), 1, 0, getMarkdownTheme());
-	}
-
-	private getMarkdownText(): string {
-		const body = this.todo.body?.trim();
-		return body ? body : "_No details yet._";
-	}
-
-	handleInput(keyData: string): void {
-		const kb = this.keybindings;
-		if (kb.matches(keyData, "tui.select.cancel")) {
-			this.onAction("back");
-			return;
-		}
-		if (kb.matches(keyData, "tui.select.confirm")) {
-			this.onAction("work");
-			return;
-		}
-		if (kb.matches(keyData, "tui.select.up")) {
-			this.scrollBy(-1);
-			return;
-		}
-		if (kb.matches(keyData, "tui.select.down")) {
-			this.scrollBy(1);
-			return;
-		}
-		if (kb.matches(keyData, "tui.select.pageUp") || matchesKey(keyData, Key.left)) {
-			this.scrollBy(-this.viewHeight || -1);
-			return;
-		}
-		if (kb.matches(keyData, "tui.select.pageDown") || matchesKey(keyData, Key.right)) {
-			this.scrollBy(this.viewHeight || 1);
-			return;
-		}
-	}
-
-	render(width: number): string[] {
-		const maxHeight = this.getMaxHeight();
-		const headerLines = 3;
-		const footerLines = 3;
-		const borderLines = 2;
-		const innerWidth = Math.max(10, width - 2);
-		const contentHeight = Math.max(1, maxHeight - headerLines - footerLines - borderLines);
-
-		const markdownLines = this.markdown.render(innerWidth);
-		this.totalLines = markdownLines.length;
-		this.viewHeight = contentHeight;
-		const maxScroll = Math.max(0, this.totalLines - contentHeight);
-		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
-
-		const visibleLines = markdownLines.slice(this.scrollOffset, this.scrollOffset + contentHeight);
-		const lines: string[] = [];
-
-		lines.push(this.buildTitleLine(innerWidth));
-		lines.push(this.buildMetaLine(innerWidth));
-		lines.push("");
-
-		for (const line of visibleLines) {
-			lines.push(truncateToWidth(line, innerWidth));
-		}
-		while (lines.length < headerLines + contentHeight) {
-			lines.push("");
-		}
-
-		lines.push("");
-		lines.push(this.buildActionLine(innerWidth));
-
-		const borderColor = (text: string) => this.theme.fg("borderMuted", text);
-		const top = borderColor(`┌${"─".repeat(innerWidth)}┐`);
-		const bottom = borderColor(`└${"─".repeat(innerWidth)}┘`);
-		const framedLines = lines.map((line) => {
-			const truncated = truncateToWidth(line, innerWidth);
-			const padding = Math.max(0, innerWidth - visibleWidth(truncated));
-			return borderColor("│") + truncated + " ".repeat(padding) + borderColor("│");
-		});
-
-		return [top, ...framedLines, bottom].map((line) => truncateToWidth(line, width));
-	}
-
-	invalidate(): void {
-		this.markdown = new Markdown(this.getMarkdownText(), 1, 0, getMarkdownTheme());
-	}
-
-	private getMaxHeight(): number {
-		const rows = this.tui.terminal.rows || 24;
-		return Math.max(10, Math.floor(rows * 0.8));
-	}
-
-	private buildTitleLine(width: number): string {
-		const titleText = this.todo.title
-			? ` ${this.todo.title} `
-			: ` Todo ${displayTodoIdFor(this.todo)} `;
-		const titleWidth = visibleWidth(titleText);
-		if (titleWidth >= width) {
-			return truncateToWidth(this.theme.fg("accent", titleText.trim()), width);
-		}
-		const leftWidth = Math.max(0, Math.floor((width - titleWidth) / 2));
-		const rightWidth = Math.max(0, width - titleWidth - leftWidth);
-		return (
-			this.theme.fg("borderMuted", "─".repeat(leftWidth)) +
-			this.theme.fg("accent", titleText) +
-			this.theme.fg("borderMuted", "─".repeat(rightWidth))
-		);
-	}
-
-	private buildMetaLine(width: number): string {
-		const status = this.todo.status || "open";
-		const statusColor = isTodoClosed(status) ? "dim" : "success";
-		const tagText = this.todo.tags.length ? this.todo.tags.join(", ") : "no tags";
-		const priLabel = this.todo.priority !== undefined ? `P${this.todo.priority}` : "P?";
-		const priColor = this.todo.priority !== undefined ? "muted" : "dim";
-		const line =
-			this.theme.fg("accent", displayTodoIdFor(this.todo)) +
-			this.theme.fg("muted", " • ") +
-			this.theme.fg(priColor, priLabel) +
-			this.theme.fg("muted", " • ") +
-			this.theme.fg(statusColor, status) +
-			this.theme.fg("muted", " • ") +
-			this.theme.fg("muted", tagText);
-		return truncateToWidth(line, width);
-	}
-
-	private buildActionLine(width: number): string {
-		const work = this.theme.fg("accent", "enter") + this.theme.fg("muted", " work on todo");
-		const back = this.theme.fg("dim", "esc back");
-		const nav = this.theme.fg("dim", "↑/↓: move. ←/→: page.");
-		const pieces = [work, back, nav];
-
-		let line = pieces.join(this.theme.fg("muted", " • "));
-		if (this.totalLines > this.viewHeight) {
-			const start = Math.min(this.totalLines, this.scrollOffset + 1);
-			const end = Math.min(this.totalLines, this.scrollOffset + this.viewHeight);
-			const scrollInfo = this.theme.fg("dim", ` ${start}-${end}/${this.totalLines}`);
-			line += scrollInfo;
-		}
-
-		return truncateToWidth(line, width);
-	}
-
-	private scrollBy(delta: number): void {
-		const maxScroll = Math.max(0, this.totalLines - this.viewHeight);
-		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset + delta, maxScroll));
 	}
 }
 
@@ -2791,25 +2621,6 @@ export default function todosExtension(pi: ExtensionAPI) {
 					return record;
 				};
 
-				const openTodoOverlay = async (record: TodoRecord): Promise<TodoOverlayAction> => {
-					const action = await ctx.ui.custom<TodoOverlayAction>(
-						(overlayTui, overlayTheme, overlayKeybindings, overlayDone) =>
-							new TodoDetailOverlayComponent(
-								overlayTui,
-								overlayTheme,
-								overlayKeybindings,
-								record,
-								overlayDone,
-							),
-						{
-							overlay: true,
-							overlayOptions: { width: "80%", maxHeight: "80%", anchor: "center" },
-						},
-					);
-
-					return action ?? "back";
-				};
-
 				const applyTodoAction = async (
 					record: TodoRecord,
 					action: TodoMenuAction,
@@ -2827,6 +2638,28 @@ export default function todosExtension(pi: ExtensionAPI) {
 						return "exit";
 					}
 					if (action === "view") {
+						// Delegate viewing to mdv (../mdv): it renders the pearl in
+						// the browser (mermaid included) and keeps running until
+						// the tab closes. Fire-and-forget so the TUI stays live.
+						const filePath = path.resolve(getTodoPath(todosDir, record.id));
+						if (!existsSync(filePath)) {
+							ctx.ui.notify(`Pearl ${displayTodoIdFor(record)} not found`, "error");
+							return "stay";
+						}
+						const child = spawn("mdv", [filePath], {
+							stdio: "ignore",
+							detached: true,
+						});
+						child.on("error", (error) => {
+							const message =
+								error instanceof Error ? error.message : String(error);
+							ctx.ui.notify(`mdv: ${message}`, "error");
+						});
+						child.unref();
+						ctx.ui.notify(
+							`Opening ${displayTodoIdFor(record)} in mdv`,
+							"info",
+						);
 						return "stay";
 					}
 					if (action === "copyPath") {
@@ -2879,18 +2712,6 @@ export default function todosExtension(pi: ExtensionAPI) {
 				};
 
 				const handleActionSelection = async (record: TodoRecord, action: TodoMenuAction) => {
-					if (action === "view") {
-						const overlayAction = await openTodoOverlay(record);
-						if (overlayAction === "work") {
-							await applyTodoAction(record, "work");
-							return;
-						}
-						if (actionMenu) {
-							setActiveComponent(actionMenu);
-						}
-						return;
-					}
-
 					if (action === "delete") {
 						const message = `Delete todo ${displayTodoIdFor(record)}? This cannot be undone.`;
 						deleteConfirm = new TodoDeleteConfirmComponent(theme, message, (confirmed) => {

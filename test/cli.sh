@@ -475,6 +475,33 @@ assert_eq "$out" "$FILE" "path prints absolute file path"
 assert_status 2 "get rejects bad id"  pearls get NOT-AN-ID
 assert_status 1 "get reports missing" pearls get TODO-00000000
 
+section "view (mdv)"
+assert_status 2 "view rejects bad id"  pearls view NOT-AN-ID
+assert_status 1 "view reports missing pearl"  pearls view TODO-00000000
+
+# Stub mdv so the test doesn't need the real viewer (or a browser).
+STUB_DIR="$WORK/stub"
+mkdir -p "$STUB_DIR"
+cat > "$STUB_DIR/mdv" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "${0%/*}/mdv-args"
+exit "${MDV_STUB_STATUS:-0}"
+STUB
+chmod +x "$STUB_DIR/mdv"
+
+OLD_PATH="$PATH"
+export PATH="$STUB_DIR:$PATH"
+assert_status 0 "view runs mdv and exits with its status (0)"  pearls view "$ID"
+assert_eq "$(cat "$STUB_DIR/mdv-args")" "$FILE" \
+	"view passes the pearl's file path to mdv"
+export MDV_STUB_STATUS=7
+assert_status 7 "view exits with mdv's status (7)"  pearls view "$ID"
+unset MDV_STUB_STATUS
+pearls view "$ID" 8080 -- -n >/dev/null 2>&1
+assert_eq "$(cat "$STUB_DIR/mdv-args")" "$FILE 8080 -n" \
+	"view passes extra args through to mdv"
+export PATH="$OLD_PATH"
+
 section "update (title + tags + body)"
 out="$(pearls update "TODO-$ID" --title "Write better docs" --tag docs --tag urgent --body "Replaced body.")"
 assert_contains "$out" "Write better docs" "update changed title"

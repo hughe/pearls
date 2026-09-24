@@ -74,6 +74,7 @@ _pearls() {
 		'memories:list memories'
 		'dir:print the resolved todos directory'
 		'path:print the path to a todo file'
+		'view:view a pearl in mdv'
 		'reslug:re-derive the filename slug from the title'
 		'migrate-filenames:rename old todo files to the current scheme'
 		'migrate-layout:move JSON metadata to top or bottom of files'
@@ -169,6 +170,9 @@ _pearls() {
 					;;
 				path)
 					_arguments '1:pearl id:_pearls_ids'
+					;;
+				view)
+					_arguments '1:pearl id:_pearls_ids' '::mdv argument'
 					;;
 				reslug)
 					_arguments \\

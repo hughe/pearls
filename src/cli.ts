@@ -20,6 +20,7 @@
  * only parses args, constructs a stub ExtensionContext, and formats
  * output.
  */
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -451,6 +452,12 @@ COMMANDS
                          to type=Memory entries).
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
+  view <id> [mdv-args]   Open the pearl in mdv, which renders it in your
+                         browser. pearls runs mdv in the foreground and
+                         exits with mdv's status; extra args after <id>
+                         are passed to mdv (a port, or flags after -- ,
+                         e.g. 'pearls view <id> -- -n' for one-shot mode).
+                         Requires mdv on $PATH.
   reslug <id>            Re-derive the filename slug from the todo's current
                          title and rename the file.
   migrate-filenames      Bring filenames up to date: todos still using the
@@ -500,6 +507,7 @@ EXAMPLES
   pearls search -p 0                   # only priority-0 todos
   pearls search -c Tdeadbeef           # children of Tdeadbeef
   pearls append Tdeadbeef --stdin-body < notes.md
+  pearls view Tdeadbeef               # render it in your browser via mdv
   pearls close Tdeadbeef
   pearls create "Long title here" --slug short-name
   pearls migrate-filenames --dry-run
@@ -628,7 +636,13 @@ async function main(argv: string[]): Promise<void> {
 	// piped output skip it entirely; when the pager is running, its stdout
 	// is the terminal, so color detection below treats output as a TTY.
 	// --version is a single line — no need to page it (git does the same).
-	initPager({ disabled: Boolean(parsed.flags.json) || Boolean(parsed.flags.version) });
+	// `view` hands the terminal to mdv, so it must not be held by a pager.
+	initPager({
+		disabled:
+			Boolean(parsed.flags.json) ||
+			Boolean(parsed.flags.version) ||
+			parsed.command === "view",
+	});
 
 	if (parsed.flags.version) {
 		out(VERSION + "\n");
@@ -730,6 +744,8 @@ async function main(argv: string[]): Promise<void> {
 			return;
 		case "path":
 			return cmdPath(run);
+		case "view":
+			return await cmdView(run);
 		case "reslug":
 			return await cmdReslug(run);
 		case "migrate-filenames":
@@ -1257,6 +1273,50 @@ async function cmdRelease(run: RunContext): Promise<void> {
 function cmdPath(run: RunContext): void {
 	const id = resolveId(run);
 	out(path.resolve(getTodoPath(run.todosDir, id)) + "\n");
+}
+
+// ---- view ------------------------------------------------------------------
+
+async function cmdView(run: RunContext): Promise<void> {
+	const id = resolveId(run);
+	const filePath = path.resolve(getTodoPath(run.todosDir, id));
+	if (!existsSync(filePath)) {
+		fail(`pearl ${formatTodoId(id)} not found`, 1);
+	}
+	// Anything after <id> passes straight through to mdv — e.g. a port
+	// number positionally, or mdv flags behind a `--` separator
+	// (`pearls view <id> -- -n` for one-shot mode).
+	const passthrough =
+		typeof run.flags.id === "string" ? run.positional : run.positional.slice(1);
+
+	// Node offers no exec(3), so this is the next best thing: mdv inherits
+	// our stdio, signals are forwarded to it, and pearls exits when — and
+	// how — mdv does. If pearls dies before mdv finishes, mdv is orphaned
+	// but keeps running (it shuts itself down when its page closes).
+	await endOutput();
+	const child = spawn("mdv", [filePath, ...passthrough], { stdio: "inherit" });
+	const forwardSignal = (signal: NodeJS.Signals) => child.kill(signal);
+	for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+		process.on(signal, forwardSignal);
+	}
+	const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+		(resolve) => {
+			child.on("error", (err) => {
+				// Match shell behaviour: 127 for "command not found".
+				const code = (err as NodeJS.ErrnoException).code;
+				fail(`mdv: ${err.message}`, code === "ENOENT" ? 127 : 1);
+			});
+			child.on("exit", (code, signal) => resolve({ code, signal }));
+		},
+	);
+	for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+		process.removeListener(signal, forwardSignal);
+	}
+	if (exit.signal !== null) {
+		// Die the same way mdv did instead of inventing an exit code.
+		process.kill(process.pid, exit.signal);
+	}
+	process.exit(exit.code ?? 1);
 }
 
 // ---- summarize-memories ---------------------------------------------------
