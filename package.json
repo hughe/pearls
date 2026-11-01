@@ -1,6 +1,6 @@
 {
   "name": "pearls",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Agent-friendly to-do list manager. CLI wrapper around the Pi `pearls` extension storage format.",
   "type": "module",
   "bin": {
@@ -21,13 +21,17 @@
     "dist",
     "README.md"
   ],
-  "dependencies": {
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "@sinclair/typebox": "*"
+  },
+  "devDependencies": {
     "@earendil-works/pi-ai": "^0.75.5",
     "@earendil-works/pi-coding-agent": "^0.75.5",
     "@earendil-works/pi-tui": "^0.75.5",
-    "@sinclair/typebox": "^0.34.0"
-  },
-  "devDependencies": {
+    "@sinclair/typebox": "^0.34.0",
     "@types/node": "^22.7.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"
