@@ -47,6 +47,7 @@ When the user asks you to remember something:
 | Add notes | `pearls append <id> --json --body "notes"` |
 | Close a task | `pearls close <id> --json` |
 | Reopen a task | `pearls reopen <id> --json` |
+| Archive old pearls | `pearls archive [--days <n>] --json` |
 | Search tasks | `pearls search -f <term> --json` |
 | Claim a task | `pearls claim <id> --json` |
 | Release a task | `pearls release <id> --json` |
@@ -71,8 +72,11 @@ both under `.pi/pearls` (a legacy `.pi/todos` still works and is moved by
 type and the slug just makes the directory readable, derived from the title
 (override it with `--slug` when creating). Changing a title does not rename
 the file — run `pearls reslug <id>` if the user wants the filename to catch
-up. Closed todos that age out are moved to `.pi/pearls/archive/` rather than
-deleted; `pearls list-all --archived` includes them.
+up. Closed pearls retire into `.pi/pearls/archive/` only when someone runs
+`pearls archive` (or the `archive` tool action) — never automatically. It
+archives pearls closed for `archiveDays` days — `gcDays` is accepted as a
+legacy alias — and `--days <n>` overrides on the command line.
+`pearls list-all --archived` includes archived pearls.
 
 Each pearl file is markdown plus a JSON metadata block. The block lives at
 the top (frontmatter, the default) or at the bottom after a `---` separator

@@ -963,13 +963,16 @@ mkdir -p "$LEGACY_PROJ/.pi/todos"
 out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
 assert_eq "$out" "$LEGACY_PROJ/.pi/pearls" ".pi/pearls is preferred over .pi/todos"
 
-section "archive on gc"
-# Separate todos dir: these settings collect aggressively.
+section "no automatic archiving"
+# Automatic GC was removed: nothing ever moves or vanishes on startup, no
+# matter what settings.json says — legacy "gc"/"archive" keys are simply
+# ignored, and "gcDays" survives as an alias for archiveDays. Retirement
+# happens only when someone runs 'pearls archive'.
 GCDIR="$WORK/gctodos"
 mkdir -p "$GCDIR"
-printf '{"gc": true, "gcDays": 30, "archive": true}\n' > "$GCDIR/settings.json"
+printf '{"gc": true, "gcDays": 30, "archive": false}\n' > "$GCDIR/settings.json"
 
-# Closed long ago -> archived.
+# Closed long ago (aged by closed_at).
 cat > "$GCDIR/Tcafe0001-retired.md" <<'OLD'
 {
   "id": "cafe0001",
@@ -980,8 +983,9 @@ cat > "$GCDIR/Tcafe0001-retired.md" <<'OLD'
   "closed_at": "2020-02-01T00:00:00.000Z"
 }
 OLD
-# Created long ago but closed recently -> must survive (ages by closed_at).
-cat > "$GCDIR/Tcafe0002-just-closed.md" <<OLD
+# Created long ago but closed recently -> not eligible even on demand
+# (ages by closed_at).
+cat > "$GCDIR/Tcafe0002-just-closed.md" <<NEW
 {
   "id": "cafe0002",
   "title": "Closed just now",
@@ -990,8 +994,8 @@ cat > "$GCDIR/Tcafe0002-just-closed.md" <<OLD
   "created_at": "2020-01-01T00:00:00.000Z",
   "closed_at": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 }
-OLD
-# Closed before closed_at existed -> falls back to created_at, so archived.
+NEW
+# Closed before closed_at existed -> falls back to created_at when retired.
 cat > "$GCDIR/Tcafe0003-no-closed-at.md" <<'OLD'
 {
   "id": "cafe0003",
@@ -1001,15 +1005,6 @@ cat > "$GCDIR/Tcafe0003-no-closed-at.md" <<'OLD'
   "created_at": "2020-01-01T00:00:00.000Z"
 }
 OLD
-
-pearls --pearls-dir "$GCDIR" list-all >/dev/null   # triggers gc
-[[ -f "$GCDIR/archive/Tcafe0001-retired.md" ]] && pass "old closed pearl moved to archive" \
-	|| fail "old closed pearl moved to archive"
-[[ -f "$GCDIR/Tcafe0002-just-closed.md" ]] && pass "recently closed pearl survives gc" \
-	|| fail "recently closed pearl survives gc"
-[[ -f "$GCDIR/archive/Tcafe0003-no-closed-at.md" ]] && pass "missing closed_at falls back to created_at" \
-	|| fail "missing closed_at falls back to created_at"
-
 cat > "$GCDIR/Mcafe0005-retired-memory.md" <<'OLDMEM'
 {
   "id": "cafe0005",
@@ -1021,10 +1016,25 @@ cat > "$GCDIR/Mcafe0005-retired-memory.md" <<'OLDMEM'
   "type": "memory"
 }
 OLDMEM
-pearls --pearls-dir "$GCDIR" list-all >/dev/null
+
+pearls --pearls-dir "$GCDIR" list-all >/dev/null   # startup: must not archive
+[[ -f "$GCDIR/Tcafe0001-retired.md" ]] && pass "old closed pearl survives startup" \
+	|| fail "old closed pearl survives startup"
+[[ -f "$GCDIR/Tcafe0002-just-closed.md" ]] && pass "recently closed pearl survives startup" \
+	|| fail "recently closed pearl survives startup"
+[[ -f "$GCDIR/Mcafe0005-retired-memory.md" ]] && pass "retired memory survives startup" \
+	|| fail "retired memory survives startup"
+[[ ! -d "$GCDIR/archive" ]] && pass "no archive directory is created" \
+	|| fail "no archive directory is created"
+
+# On demand, retirement still works over legacy settings, and the
+# created_at fallback + M prefix behaviour carry over.
+out="$(pearls --pearls-dir "$GCDIR" archive --days 0)"
 [[ -f "$GCDIR/archive/Mcafe0005-retired-memory.md" ]] \
 	&& pass "archived memory keeps its M prefix" || fail "archived memory keeps its M prefix"
-
+[[ -f "$GCDIR/archive/Tcafe0003-no-closed-at.md" ]] \
+	&& pass "missing closed_at falls back to created_at" \
+	|| fail "missing closed_at falls back to created_at"
 out="$(pearls --pearls-dir "$GCDIR" list-all)"
 assert_not_contains "$out" "Retired long ago" "archived pearl is out of list-all"
 out="$(pearls --pearls-dir "$GCDIR" list-all --archived)"
@@ -1032,27 +1042,117 @@ assert_contains "$out" "Retired long ago" "--archived brings it back"
 assert_contains "$(pearls --pearls-dir "$GCDIR" get TODO-cafe0001 --json)" '"title": "Retired long ago"' \
 	"archived pearl is still readable by id"
 
-# archive: false keeps the old delete-on-gc behaviour.
-printf '{"gc": true, "gcDays": 30, "archive": false}\n' > "$GCDIR/settings.json"
-cat > "$GCDIR/Tcafe0004-doomed.md" <<'OLD'
+section "--no-gc (deprecated no-op)"
+# The flag no longer does anything; it is still accepted so existing
+# scripts keep working.
+out="$(pearls --no-gc list)"
+assert_contains "$out" "Open todos" "--no-gc is still accepted"
+
+section "archive command"
+# The only form of retirement: 'pearls archive' moves every pearl closed
+# for N days into the archive, on demand. Legacy "gcDays" is the alias for
+# archiveDays, so these settings give a 30-day threshold.
+ARDIR="$WORK/archtodos"
+mkdir -p "$ARDIR"
+printf '{"gcDays": 30}\n' > "$ARDIR/settings.json"
+
+cat > "$ARDIR/Tbeef0001-old-closed.md" <<'OLD'
 {
-  "id": "cafe0004",
-  "title": "Doomed",
+  "id": "beef0001",
+  "title": "Old closed",
   "tags": [],
   "status": "closed",
   "created_at": "2020-01-01T00:00:00.000Z",
   "closed_at": "2020-02-01T00:00:00.000Z"
 }
 OLD
-pearls --pearls-dir "$GCDIR" list-all >/dev/null
-[[ ! -f "$GCDIR/Tcafe0004-doomed.md" && ! -f "$GCDIR/archive/Tcafe0004-doomed.md" ]] \
-	&& pass "archive:false deletes as before" || fail "archive:false deletes as before"
+cat > "$ARDIR/Tbeef0002-fresh-closed.md" <<NEW
+{
+  "id": "beef0002",
+  "title": "Freshly closed",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z",
+  "closed_at": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+}
+NEW
+cat > "$ARDIR/Tbeef0003-still-open.md" <<'OLD'
+{
+  "id": "beef0003",
+  "title": "Old but open",
+  "tags": [],
+  "status": "open",
+  "created_at": "2020-01-01T00:00:00.000Z"
+}
+OLD
+cat > "$ARDIR/Tbeef0004-ten-days.md" <<NEW
+{
+  "id": "beef0004",
+  "title": "Ten days closed",
+  "tags": [],
+  "status": "closed",
+  "created_at": "2020-01-01T00:00:00.000Z",
+  "closed_at": "$(date -u -d '10 days ago' +%Y-%m-%dT%H:%M:%S.000Z)"
+}
+NEW
 
-section "--no-gc"
-# Can't easily test GC without time travel; just assert the flag is
-# accepted and the command still succeeds.
-out="$(pearls --no-gc list)"
-assert_contains "$out" "Open todos" "--no-gc still produces output"
+# A plain startup (list) must never archive anything.
+pearls --pearls-dir "$ARDIR" list >/dev/null
+[[ -f "$ARDIR/Tbeef0001-old-closed.md" ]] \
+	&& pass "startup never archives" \
+	|| fail "startup never archives"
+
+# --dry-run reports but does not move.
+out="$(pearls --pearls-dir "$ARDIR" archive --dry-run)"
+assert_contains "$out" "Tbeef0001" "dry run lists the eligible pearl"
+assert_contains "$out" "would archive 1 pearl(s)" "dry run reports the count"
+[[ -f "$ARDIR/Tbeef0001-old-closed.md" ]] \
+	&& pass "dry run leaves files in place" \
+	|| fail "dry run leaves files in place"
+
+# For real: default threshold is archiveDays (legacy gcDays = 30), so only
+# beef0001 goes.
+out="$(pearls --pearls-dir "$ARDIR" archive)"
+assert_contains "$out" "Tbeef0001" "archive lists what it archived"
+[[ -f "$ARDIR/archive/Tbeef0001-old-closed.md" ]] \
+	&& pass "archive moves the old closed pearl" \
+	|| fail "archive moves the old closed pearl"
+[[ -f "$ARDIR/Tbeef0002-fresh-closed.md" ]] \
+	&& pass "recently closed pearl survives archive" \
+	|| fail "recently closed pearl survives archive"
+[[ -f "$ARDIR/Tbeef0003-still-open.md" ]] \
+	&& pass "open pearl survives archive" \
+	|| fail "open pearl survives archive"
+[[ -f "$ARDIR/Tbeef0004-ten-days.md" ]] \
+	&& pass "pearl closed 10 days survives archiveDays=30 threshold" \
+	|| fail "pearl closed 10 days survives archiveDays=30 threshold"
+assert_not_contains "$(pearls --pearls-dir "$ARDIR" list-all)" "Old closed" \
+	"archived pearl drops out of list-all"
+assert_contains "$(pearls --pearls-dir "$ARDIR" list-all --archived)" "Old closed" \
+	"--archived brings it back"
+assert_contains "$(pearls --pearls-dir "$ARDIR" get Tbeef0001 --json)" '"title": "Old closed"' \
+	"archived pearl is still readable by id"
+
+# --days overrides the threshold: 10-day-old pearl goes with --days 5.
+out="$(pearls --pearls-dir "$ARDIR" archive --days 5 --json)"
+assert_contains "$out" '"id": "beef0004"' "archive --json reports the archived pearl"
+[[ -f "$ARDIR/archive/Tbeef0004-ten-days.md" ]] \
+	&& pass "--days override archives younger pearls" \
+	|| fail "--days override archives younger pearls"
+
+# --days 0 archives everything closed, json shape and all.
+out="$(pearls --pearls-dir "$ARDIR" archive --days 0 --json)"
+assert_contains "$out" '"id": "beef0002"' "--days 0 archives all closed pearls"
+[[ -f "$ARDIR/archive/Tbeef0002-fresh-closed.md" ]] \
+	&& pass "freshly closed pearl archived with --days 0" \
+	|| fail "freshly closed pearl archived with --days 0"
+assert_not_contains "$(pearls --pearls-dir "$ARDIR" archive --json)" '"id":' \
+	"nothing left to archive"
+
+# No positional id: archive is bulk-only.
+assert_status 2 "archive with an id argument exits 2" pearls --pearls-dir "$ARDIR" archive Tbeef0003
+assert_status 2 "archive with a bad --days exits 2" pearls --pearls-dir "$ARDIR" archive --days -1
+
 
 section "layout migration (frontmatter <-> footer)"
 # Layout = where the JSON metadata block lives. Default is frontmatter

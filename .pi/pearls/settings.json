@@ -1,6 +1,4 @@
 {
-  "gc": true,
-  "gcDays": 30,
-  "archive": true,
+  "archiveDays": 30,
   "layout": "footer"
 }

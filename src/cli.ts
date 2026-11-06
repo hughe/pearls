@@ -29,6 +29,7 @@ import process from "node:process";
 
 import {
 	appendTodoBody,
+	archiveClosedTodos,
 	claimTodoAssignment,
 	clearAssignmentIfClosed,
 	deleteTodo,
@@ -37,7 +38,6 @@ import {
 	filterTodos,
 	formatTodoId,
 	formatTodoList,
-	garbageCollectTodos,
 	generateTodoId,
 	getTodoArchiveDir,
 	getTodoPath,
@@ -57,6 +57,7 @@ import {
 	validateTodoId,
 	withTodoLock,
 	writeTodoFile,
+	type ArchiveClosedTodosResult,
 	type TodoFrontMatter,
 	type TodoLayout,
 	type TodoRecord,
@@ -137,6 +138,7 @@ const KNOWN_STRING_FLAGS = new Set([
 	"type",
 	"slug",
 	"to",
+	"days",
 ]);
 
 // Short flags that take a value, mapped to their long-form key.
@@ -157,7 +159,7 @@ const KNOWN_BOOL_FLAGS = new Set([
 	"version",
 	"stdin-body",
 	"quiet",
-	"no-gc",
+	"no-gc", // deprecated no-op: automatic archiving was removed
 	"dry-run",
 	"archived",
 	"color",
@@ -398,10 +400,8 @@ GLOBAL FLAGS
                          colors only when stdout is a terminal, so piped
                          output is plain. Also honors $NO_COLOR,
                          $FORCE_COLOR and $CLICOLOR_FORCE.
-  --no-gc                Skip the normal startup garbage collection of old
-                         closed todos. GC moves them to <todos-dir>/archive
-                         rather than deleting them (set "archive": false in
-                         settings.json for the old delete behaviour).
+  --no-gc                Deprecated no-op: automatic archiving was
+                         removed. Pearls retire only via 'pearls archive'.
   -h, --help             Show this help.
       --version          Print version and exit.
 
@@ -410,7 +410,8 @@ COMMANDS
                          Closed todos are hidden whether they are top-level
                          or children of an epic.
   list-all               List every todo including closed. Add --archived to
-                         include todos GC has moved to <todos-dir>/archive.
+                         include todos 'pearls archive' has moved to
+                         <todos-dir>/archive.
   list-tags              Count tags on open + assigned todos, like
                          'sort | uniq -c'. Add --closed to include closed
                          todos; --archived folds in the archive too.
@@ -444,6 +445,13 @@ COMMANDS
   delete <id>            Delete a todo.
   close <id>             Shortcut for update --status closed.
   reopen <id>            Shortcut for update --status open.
+  archive                Archive every pearl that has been closed for N
+                         days (N = archiveDays from settings.json, which
+                         gcDays is a legacy alias for; --days <n> overrides,
+                         --days 0 archives all closed pearls). --dry-run
+                         previews without moving anything. Nothing is ever
+                         archived automatically — this command is the only
+                         way pearls retire.
   claim <id>             Claim a todo for the current session. --force to
                          steal from another session.
   release <id>           Release the current session's assignment. --force
@@ -511,6 +519,7 @@ EXAMPLES
   pearls append Tdeadbeef --stdin-body < notes.md
   pearls view Tdeadbeef               # render it in your browser via mdv
   pearls close Tdeadbeef
+  pearls archive --days 0 --dry-run   # preview archiving all closed pearls
   pearls create "Long title here" --slug short-name
   pearls migrate-filenames --dry-run
   pearls migrate-layout --to footer   # markdown first, JSON at the bottom
@@ -588,10 +597,13 @@ FILE LAYOUT
   rewrites every pearl and updates settings.json so future writes match.
 
 ARCHIVE
-  Closed todos older than gcDays are moved to .pi/pearls/archive rather
-  than deleted. They drop out of list/list-all but 'pearls get <id>' and
-  'pearls list-all --archived' still reach them. 'pearls delete' is a real
-  delete and is still for mistakes only.
+  'pearls archive' moves pearls closed longer than archiveDays (gcDays is
+  a legacy alias) to .pi/pearls/archive (--days <n> overrides, --days 0
+  archives all closed pearls, --dry-run previews). They drop out of
+  list/list-all but 'pearls get <id>' and 'pearls list-all --archived'
+  still reach them. 'pearls delete' is a real delete and is still for
+  mistakes only. Nothing is archived automatically — the command is the
+  only way pearls retire.
 
 OUTPUT FOR AGENTS
   Add --json to list / search / get / create / update for a stable
@@ -682,12 +694,9 @@ async function main(argv: string[]): Promise<void> {
 		typeof parsed.flags.session === "string" ? parsed.flags.session : defaultSessionId();
 	const ctx = makeCtx({ cwd, sessionId });
 
-	// Mirror todo.ts's session_start behaviour: ensure dir + (optionally) gc.
+	// Mirror the extension's session_start: ensure the dir exists. Pearls
+	// are never archived or deleted automatically.
 	await ensureTodosDir(todosDir);
-	if (!parsed.flags["no-gc"]) {
-		const settings = await readTodoSettings(todosDir);
-		await garbageCollectTodos(todosDir, settings);
-	}
 
 	const run: RunContext = {
 		todosDir,
@@ -743,6 +752,8 @@ async function main(argv: string[]): Promise<void> {
 			return await cmdClaim(run);
 		case "release":
 			return await cmdRelease(run);
+		case "archive":
+			return await cmdArchive(run);
 		case "dir":
 			out(todosDir + "\n");
 			return;
@@ -778,7 +789,8 @@ async function cmdList(
 	opts: { includeClosed: boolean },
 ): Promise<void> {
 	const allTodos = await listTodos(run.todosDir);
-	// GC moves retired pearls into <todos-dir>/archive; --archived folds
+	// pearls archive moves retired pearls into <todos-dir>/archive;
+	// --archived folds
 	// them back into the listing (they are closed, so they show up in the
 	// closed section).
 	if (run.flags.archived) {
@@ -1271,6 +1283,52 @@ async function cmdRelease(run: RunContext): Promise<void> {
 
 	if (run.json) printJsonTodo(result as TodoRecord);
 	else printHumanTodo(run, result as TodoRecord);
+}
+
+// ---- archive ----------------------------------------------------------------
+
+async function cmdArchive(run: RunContext): Promise<void> {
+	// Bulk by design: archive takes no pearl id. It retires every pearl
+	// that has been closed for N days — and it is the only thing that
+	// ever does; automatic GC is gone.
+	if (run.positional.length > 0) {
+		throw new CliError(
+			"archive takes no pearl id; it archives every pearl closed N days ago",
+		);
+	}
+	let days: number;
+	if (run.flags.days !== undefined) {
+		const n = Number(run.flags.days);
+		if (!Number.isInteger(n) || n < 0) {
+			throw new CliError("--days requires a whole number of days (0 or more)");
+		}
+		days = n;
+	} else {
+		const settings = await readTodoSettings(run.todosDir);
+		days = settings.archiveDays;
+	}
+	const dryRun = Boolean(run.flags["dry-run"]);
+	const result: ArchiveClosedTodosResult = await archiveClosedTodos(
+		run.todosDir,
+		days,
+		dryRun,
+	);
+
+	if (run.json) {
+		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+		return;
+	}
+	const verb = dryRun ? "Would archive" : "Archived";
+	for (const a of result.archived) {
+		if (run.color) {
+			out(`${colorPearlId(a.displayId, true)}  ${dim(a.title)}\n`);
+		} else {
+			out(`${a.displayId}  ${a.title}\n`);
+		}
+	}
+	out(
+		`${dryRun ? "would archive" : "archived"} ${result.archived.length} pearl(s) closed more than ${days} day(s) ago\n`,
+	);
 }
 
 // ---- path -----------------------------------------------------------------

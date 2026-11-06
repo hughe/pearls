@@ -102,15 +102,14 @@ Global flags:
   `$PEARLS_SESSION` or `cli:<user>@<host>`.
 - `--json` — emit a stable JSON payload (identical to what Pi's `todo`
   tool returns to an LLM), suitable for any agent that parses tool output.
-- `--no-gc` — skip startup GC of old closed todos.
+- `--no-gc` — deprecated no-op: automatic archiving was removed. Pearls
+  retire only via `pearls archive`.
 
 Storage settings live in `<todos-dir>/settings.json`:
 
-- `gc` (default `true`) — retire closed todos on startup.
-- `gcDays` (default `30`) — how long after `closed_at` a todo is retired.
+- `archiveDays` (default `30`) — how long after `closed_at` a pearl is
+  eligible for `pearls archive`. `gcDays` is accepted as a legacy alias.
   Todos closed before `closed_at` existed fall back to `created_at`.
-- `archive` (default `true`) — move retired todos to `<todos-dir>/archive/`
-  instead of deleting them.
 - `layout` (default `"frontmatter"`) — which on-disk layout new writes
   use: `"frontmatter"` (JSON at the top) or `"footer"` (markdown first,
   JSON at the bottom after a `---` separator). Managed by
@@ -130,6 +129,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `append <id>`           | Append markdown to body (from `--body` / file / stdin).              |
 | `close <id>`            | Shortcut for `update --status closed`.                               |
 | `reopen <id>`           | Shortcut for `update --status open`.                                 |
+| `archive`               | Archive every pearl that has been closed for N days (N = `archiveDays`, which `gcDays` is a legacy alias for, or `--days <n>`; `--days 0` archives all closed pearls). `--dry-run` previews. Nothing is ever archived automatically — this command is the only way pearls retire. |
 | `claim <id>`            | Assign to current session. `--force` to steal.                       |
 | `release <id>`          | Release the session's assignment. `--force` to release someone else's.|
 | `delete <id>`           | Remove a todo.                                                       |

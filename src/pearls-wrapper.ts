@@ -88,9 +88,7 @@ export const renameTodoFile: (
 export const ensureTodosDir: (todosDir: string) => Promise<void> =
 	todo.ensureTodosDir;
 export interface TodoSettings {
-	gc: boolean;
-	gcDays: number;
-	archive: boolean;
+	archiveDays: number;
 	layout: TodoLayout;
 }
 export const readTodoSettings: (
@@ -100,10 +98,26 @@ export const writeTodoSettings: (
 	todosDir: string,
 	settings: TodoSettings,
 ) => Promise<void> = todo.writeTodoSettings;
-export const garbageCollectTodos: (
+export interface ArchivedPearlSummary {
+	/** Bare hex id, as stored in front matter. */
+	id: string;
+	/** Display id (T<hex> / M<hex>), as shown to users. */
+	displayId: string;
+	title: string;
+	/** Filename as it sat in the backlog (and now sits in the archive). */
+	file: string;
+}
+export interface ArchiveClosedTodosResult {
+	/** Age threshold used: pearls closed longer than this were archived. */
+	days: number;
+	dryRun: boolean;
+	archived: ArchivedPearlSummary[];
+}
+export const archiveClosedTodos: (
 	todosDir: string,
-	settings: TodoSettings,
-) => Promise<void> = todo.garbageCollectTodos;
+	days: number,
+	dryRun?: boolean,
+) => Promise<ArchiveClosedTodosResult> = todo.archiveClosedTodos;
 
 export const writeTodoFile: (
 	filePath: string,

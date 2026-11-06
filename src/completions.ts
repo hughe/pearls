@@ -40,7 +40,6 @@ _pearls() {
 		'--json[emit stable JSON output]'
 		'--color[force colorized output]'
 		'--no-color[disable colorized output]'
-		'--no-gc[skip startup garbage collection]'
 		'(-h --help)'{-h,--help}'[show help]'
 		'--version[print version and exit]'
 	)
@@ -69,6 +68,7 @@ _pearls() {
 		'close:close a todo'
 		'reopen:reopen a todo'
 		'open:alias for reopen'
+		'archive:archive pearls closed for N days'
 		'claim:claim a todo for the current session'
 		'release:release the session assignment'
 		'memories:list memories'
@@ -163,6 +163,12 @@ _pearls() {
 					;;
 				close|reopen|open)
 					_arguments '1:pearl id:_pearls_ids' '--json[emit stable JSON output]'
+					;;
+				archive)
+					_arguments \\
+						'--days[archive pearls closed for at least N days]:days' \\
+						'--dry-run[preview without moving anything]' \\
+						'--json[emit stable JSON output]'
 					;;
 				claim|release)
 					_arguments \\

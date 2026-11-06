@@ -25,8 +25,9 @@
  * Todo storage settings are kept in <todo-dir>/settings.json.
  * Defaults:
  * {
- *   "gc": true,   // delete closed todos older than gcDays on startup
- *   "gcDays": 30   // age threshold for GC (days since closed_at)
+ *   "archiveDays": 30  // how long after closed_at a pearl is eligible for
+ *                      // the on-demand "archive" action ("gcDays" is
+ *                      // accepted as a legacy alias)
  * }
  *
  * Use `/pearls` to bring up the visual todo manager or just let the LLM use them
@@ -78,12 +79,11 @@ const TODO_FILE_PATTERN = /^([TM])([a-f0-9]{8})-(.+)\.md$/i;
 const LEGACY_TODO_FILE_PATTERN = /^([a-f0-9]{8})\.md$/i;
 const SLUG_MAX_LENGTH = 40;
 const SLUG_FALLBACK = "untitled";
-// Closed todos are moved here by GC instead of being deleted.
+// Pearls retired by the on-demand archive step live here instead of
+// being deleted.
 const TODO_ARCHIVE_DIR_NAME = "archive";
 const DEFAULT_TODO_SETTINGS = {
-	gc: true,
-	gcDays: 30,
-	archive: true,
+	archiveDays: 30,
 	layout: "frontmatter" as TodoLayout,
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
@@ -116,9 +116,7 @@ interface LockInfo {
 }
 
 export interface TodoSettings {
-	gc: boolean;
-	gcDays: number;
-	archive: boolean;
+	archiveDays: number;
 	layout: TodoLayout;
 }
 
@@ -147,6 +145,7 @@ const TodoParams = Type.Object({
 		"delete",
 		"claim",
 		"release",
+		"archive",
 	] as const),
 	id: Type.Optional(
 		Type.String({ description: "Todo id (TODO-<hex> or raw hex filename)" }),
@@ -171,6 +170,18 @@ const TodoParams = Type.Object({
 	),
 	force: Type.Optional(Type.Boolean({ description: "Override another session's assignment" })),
 	type: Type.Optional(StringEnum(["todo", "memory"] as const, { description: "Type of entry: 'todo' (default) or 'memory'. Determines whether this is a task or a persistent memory note." })),
+	days: Type.Optional(
+		Type.Integer({
+			minimum: 0,
+			description:
+				"For archive: archive pearls closed longer than this many days (default: archiveDays from settings.json)",
+		}),
+	),
+	dryRun: Type.Optional(
+		Type.Boolean({
+			description: "For archive: report what would be archived without moving anything",
+		}),
+	),
 });
 
 type TodoAction =
@@ -183,7 +194,8 @@ type TodoAction =
 	| "append"
 	| "delete"
 	| "claim"
-	| "release";
+	| "release"
+	| "archive";
 
 type TodoMenuAction =
 	| "work"
@@ -202,7 +214,8 @@ type TodoToolDetails =
 			action: "get" | "create" | "update" | "append" | "delete" | "claim" | "release";
 			todo: TodoRecord;
 			error?: string;
-		};
+		}
+	| { action: "archive"; result: ArchiveClosedTodosResult; error?: string };
 
 export function formatTodoId(id: string, type?: TodoType): string {
 	const prefix = type === "memory" ? MEMORY_FILE_PREFIX : TODO_FILE_PREFIX;
@@ -746,26 +759,29 @@ function getTodoSettingsPath(todosDir: string): string {
 	return path.join(todosDir, TODO_SETTINGS_NAME);
 }
 
-function normalizeTodoSettings(raw: Partial<TodoSettings>): TodoSettings {
-	const gc = raw.gc ?? DEFAULT_TODO_SETTINGS.gc;
-	const gcDays = Number.isFinite(raw.gcDays) ? raw.gcDays : DEFAULT_TODO_SETTINGS.gcDays;
-	const archive = raw.archive ?? DEFAULT_TODO_SETTINGS.archive;
+function normalizeTodoSettings(raw: Partial<TodoSettings> & { gcDays?: number }): TodoSettings {
+	// "gcDays" is the pre-on-demand name for the archive threshold; honour
+	// it when "archiveDays" is absent so old settings files keep working.
+	// (Any "gc" key is simply ignored.)
+	const archiveDays = Number.isFinite(raw.archiveDays)
+		? raw.archiveDays
+		: Number.isFinite(raw.gcDays)
+			? raw.gcDays
+			: DEFAULT_TODO_SETTINGS.archiveDays;
 	const layout: TodoLayout = raw.layout === "footer" ? "footer" : "frontmatter";
 	return {
-		gc: Boolean(gc),
-		gcDays: Math.max(0, Math.floor(gcDays)),
-		archive: Boolean(archive),
+		archiveDays: Math.max(0, Math.floor(archiveDays)),
 		layout,
 	};
 }
 
 export async function readTodoSettings(todosDir: string): Promise<TodoSettings> {
 	const settingsPath = getTodoSettingsPath(todosDir);
-	let data: Partial<TodoSettings> = {};
+	let data: Partial<TodoSettings> & { gcDays?: number } = {};
 
 	try {
 		const raw = await fs.readFile(settingsPath, "utf8");
-		data = JSON.parse(raw) as Partial<TodoSettings>;
+		data = JSON.parse(raw) as Partial<TodoSettings> & { gcDays?: number };
 	} catch {
 		data = {};
 	}
@@ -781,53 +797,115 @@ export async function writeTodoSettings(todosDir: string, settings: TodoSettings
 	);
 }
 
-export async function garbageCollectTodos(todosDir: string, settings: TodoSettings): Promise<void> {
-	if (!settings.gc) return;
+interface RetirableTodo {
+	entry: string;
+	filePath: string;
+	id: string;
+	title: string;
+	slug?: string;
+	type?: TodoType;
+}
 
+/**
+ * Pearls eligible for retirement: closed, and retired (by closed_at, or
+ * created_at when closed_at is missing) longer ago than `cutoff`. Scans
+ * the backlog directory only — archived pearls are never revisited.
+ * Unreadable files are skipped, as retirement always has.
+ */
+async function findRetirableTodos(todosDir: string, cutoff: number): Promise<RetirableTodo[]> {
 	let entries: string[] = [];
 	try {
 		entries = await fs.readdir(todosDir);
 	} catch {
-		return;
+		return [];
 	}
 
-	const cutoff = Date.now() - settings.gcDays * 24 * 60 * 60 * 1000;
+	const retirable: RetirableTodo[] = [];
 	await Promise.all(
-		entries
-			.map((entry) => ({ entry, parsed: parseTodoFileName(entry) }))
-			.filter((candidate) => candidate.parsed !== null)
-			.map(async ({ entry, parsed: name }) => {
-				const id = name!.id;
-				const filePath = path.join(todosDir, entry);
-				try {
-					const content = await fs.readFile(filePath, "utf8");
-					const { frontMatter } = splitFrontMatter(content);
-					const parsed = parseFrontMatter(frontMatter, id);
-					if (!isTodoClosed(parsed.status)) return;
-					// Age from closed_at — a todo created a year ago but closed
-					// yesterday has only just finished. Todos closed before
-					// closed_at existed have none, so fall back to created_at
-					// rather than keeping them forever.
-					const retiredAt = Date.parse(parsed.closed_at || parsed.created_at);
-					if (!Number.isFinite(retiredAt)) return;
-					if (retiredAt >= cutoff) return;
-					if (settings.archive) {
-						await archiveTodoFile(
-							todosDir,
-							filePath,
-							entry,
-							id,
-							parsed.slug || parsed.title,
-							parsed.type,
-						);
-					} else {
-						await fs.unlink(filePath);
-					}
-				} catch {
-					// ignore unreadable todo
-				}
-			}),
+		entries.map(async (entry) => {
+			const name = parseTodoFileName(entry);
+			if (!name) return;
+			try {
+				const content = await fs.readFile(path.join(todosDir, entry), "utf8");
+				const { frontMatter } = splitFrontMatter(content);
+				const parsed = parseFrontMatter(frontMatter, name.id);
+				if (!isTodoClosed(parsed.status)) return;
+				// Age from closed_at — a todo created a year ago but closed
+				// yesterday has only just finished. Todos closed before
+				// closed_at existed have none, so fall back to created_at
+				// rather than keeping them forever.
+				const retiredAt = Date.parse(parsed.closed_at || parsed.created_at);
+				if (!Number.isFinite(retiredAt)) return;
+				if (retiredAt >= cutoff) return;
+				retirable.push({
+					entry,
+					filePath: path.join(todosDir, entry),
+					id: name.id,
+					title: parsed.title,
+					slug: parsed.slug,
+					type: parsed.type,
+				});
+			} catch {
+				// ignore unreadable todo
+			}
+		}),
 	);
+	return retirable;
+}
+
+export interface ArchivedPearlSummary {
+	/** Bare hex id, as stored in front matter. */
+	id: string;
+	/** Display id (T<hex> / M<hex>), as shown to users. */
+	displayId: string;
+	title: string;
+	/** Filename as it sat in the backlog (and now sits in the archive). */
+	file: string;
+}
+
+export interface ArchiveClosedTodosResult {
+	/** Age threshold used: pearls closed longer than this were archived. */
+	days: number;
+	dryRun: boolean;
+	archived: ArchivedPearlSummary[];
+}
+
+/**
+ * Archive every pearl that has been closed for `days` days, on demand.
+ *
+ * The only retirement path: the same eligibility the old automatic GC
+ * had (closed, aged by closed_at with a created_at fallback), but it runs
+ * only because someone invoked it — pearls are never moved or deleted
+ * automatically. It always archives, never deletes; deletion stays with
+ * deleteTodo.
+ */
+export async function archiveClosedTodos(
+	todosDir: string,
+	days: number,
+	dryRun = false,
+): Promise<ArchiveClosedTodosResult> {
+	const cutoff = Date.now() - Math.max(0, Math.floor(days)) * 24 * 60 * 60 * 1000;
+	const retirable = await findRetirableTodos(todosDir, cutoff);
+	const archived: ArchivedPearlSummary[] = [];
+	for (const todo of retirable) {
+		if (!dryRun) {
+			await archiveTodoFile(
+				todosDir,
+				todo.filePath,
+				todo.entry,
+				todo.id,
+				todo.slug || todo.title,
+				todo.type,
+			);
+		}
+		archived.push({
+			id: todo.id,
+			displayId: formatTodoId(todo.id, todo.type),
+			title: todo.title || "(untitled)",
+			file: todo.entry,
+		});
+	}
+	return { days, dryRun, archived };
 }
 
 /**
@@ -1957,8 +2035,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		const todosDir = getTodosDir(ctx.cwd);
 		await ensureTodosDir(todosDir);
-		const settings = await readTodoSettings(todosDir);
-		await garbageCollectTodos(todosDir, settings);
+		// No automatic retirement here — pearls are never moved or deleted
+		// without someone asking (the "archive" tool action is on demand).
 		needsMemoryIndex = true;
 	});
 
@@ -1986,10 +2064,11 @@ export default function todosExtension(pi: ExtensionAPI) {
 		name: "pearls",
 		label: "Pearls",
 		description:
-			`Manage file-based todos in ${todosDirLabel} (list, list-all, get, create, update, append, delete, claim, release). ` +
+			`Manage file-based todos in ${todosDirLabel} (list, list-all, get, create, update, append, delete, claim, release, archive). ` +
 			"Title is the short summary; body is long-form markdown notes (update replaces, append adds). " +
 			"Todo ids are shown as TODO-<hex>; id parameters accept TODO-<hex> or the raw hex filename. " +
-			"Claim tasks before working on them to avoid conflicts, and close them when complete.",
+			"Claim tasks before working on them to avoid conflicts, and close them when complete. " +
+			"Action \"archive\" archives pearls closed longer than archiveDays (or a given number of days) on demand.",
 		parameters: TodoParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -2300,6 +2379,23 @@ export default function todosExtension(pi: ExtensionAPI) {
 					};
 				}
 
+				case "archive": {
+					// The only retirement path: archive every pearl closed longer
+					// than `days` days. Pearls are never moved automatically.
+					const settings = await readTodoSettings(todosDir);
+					const days = params.days ?? settings.archiveDays;
+					const result = await archiveClosedTodos(todosDir, days, Boolean(params.dryRun));
+					const text =
+						result.archived.length === 0
+							? `No pearls closed more than ${days} day(s) ago to archive.`
+							: `${result.dryRun ? "Would archive" : "Archived"} ${result.archived.length} pearl(s) closed more than ${days} day(s) ago:\n` +
+								result.archived.map((a) => `${a.displayId} ${a.title}`).join("\n");
+					return {
+						content: [{ type: "text", text }],
+						details: { action: "archive", result },
+					};
+				}
+
 				case "delete": {
 					if (!params.id) {
 						return {
@@ -2370,6 +2466,19 @@ export default function todosExtension(pi: ExtensionAPI) {
 					}
 				}
 				return new Text(text, 0, 0);
+			}
+
+			if (details.action === "archive") {
+				const { result: archiveResult } = details;
+				const verb = archiveResult.dryRun ? "Would archive" : "Archived";
+				const header =
+					theme.fg("success", "✓ ") +
+					theme.fg("muted", `${verb} `) +
+					`${archiveResult.archived.length} pearl(s) closed more than ${archiveResult.days} day(s) ago`;
+				const lines = archiveResult.archived.map(
+					(a) => `${a.displayId} ${a.title || "(untitled)"}`,
+				);
+				return new Text([header, ...lines].join("\n"), 0, 0);
 			}
 
 			if (!details.todo) {
