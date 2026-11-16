@@ -219,6 +219,13 @@ assert_contains "$out" "Closed todos (0)" "list shows 0 closed"
 assert_contains "$out" "Write docs" "list includes first todo"
 assert_contains "$out" "Second task" "list includes second todo"
 
+# Bare `pearls` (no command) is shorthand for `pearls list`.
+out="$(pearls)"
+assert_contains "$out" "Open todos (2)" "bare pearls defaults to list"
+assert_contains "$out" "Write docs" "bare pearls shows todo titles"
+out="$(pearls --json)"
+assert_contains "$out" '"open": [' "bare pearls --json uses list shape"
+
 section "list --json (agent shape)"
 out="$(pearls list --json)"
 assert_contains "$out" '"assigned": []' "json list has empty assigned"
@@ -226,6 +233,36 @@ assert_contains "$out" '"open": [' "json list has open array"
 assert_contains "$out" '"closed": []' "json list has empty closed"
 # Body isn't part of the list payload (matches Pi tool shape).
 assert_not_contains "$out" '"body"' "json list omits body field"
+
+section "list --tag (tag filtering)"
+# At this point: "Write docs" [docs, readme] and "Second task" [qa].
+out="$(pearls list --tag docs)"
+assert_contains "$out" "Write docs" "list --tag keeps the tagged todo"
+assert_not_contains "$out" "Second task" "list --tag drops non-matching todos"
+
+out="$(pearls list --tag docs --tag readme)"
+assert_contains "$out" "Write docs" "list --tag several tags keeps a todo carrying all"
+assert_not_contains "$out" "Second task" "list --tag several tags still drops non-matches"
+
+out="$(pearls list --tag docs --tag qa)"
+assert_not_contains "$out" "Write docs" "list --tag uses AND semantics (no todo has both)"
+
+out="$(pearls list --tag docs --json)"
+assert_contains "$out" '"title": "Write docs"' "list --tag works with --json"
+assert_not_contains "$out" '"title": "Second task"' "list --tag --json drops non-matches"
+
+# list-all includes closed todos, and the filter applies there too.
+TAGFILTER_CLOSED_ID="$(pearls create 'Closed tagged fixture' --tag docs | extract_id)"
+pearls close "$TAGFILTER_CLOSED_ID" >/dev/null
+out="$(pearls list --tag docs)"
+assert_not_contains "$out" "Closed tagged fixture" "list --tag keeps hiding closed todos"
+out="$(pearls list-all --tag docs)"
+assert_contains "$out" "Closed tagged fixture" "list-all --tag includes matching closed todos"
+assert_not_contains "$out" "Second task" "list-all --tag drops non-matching todos"
+out="$(pearls list-all --tag qa)"
+assert_contains "$out" "Second task" "list-all --tag qa keeps the qa todo"
+assert_not_contains "$out" "Closed tagged fixture" "list-all --tag qa drops the docs todo"
+pearls delete "$TAGFILTER_CLOSED_ID" >/dev/null
 
 section "list-tags"
 out="$(pearls list-tags)"
@@ -915,6 +952,15 @@ assert_contains "$(pearls memories)" "Legacy memory" "re-lettered memory still l
 assert_not_contains "$(pearls list)" "Legacy memory" "memories stay out of the todo list"
 out="$(pearls migrate-filenames)"
 assert_contains "$out" "renamed 0 file(s)" "prefix migration is idempotent"
+
+# memories --tag filters the memory listing the same way list --tag does.
+TAGGED_MEM_ID="$(pearls create 'Tagged memory fixture' --type memory --tag memtag | extract_id)"
+out="$(pearls memories --tag memtag)"
+assert_contains "$out" "Tagged memory fixture" "memories --tag keeps the tagged memory"
+assert_not_contains "$out" "Legacy memory" "memories --tag drops untagged memories"
+out="$(pearls memories --tag other)"
+assert_not_contains "$out" "Tagged memory fixture" "memories --tag drops non-matching tags"
+pearls delete "$TAGGED_MEM_ID" >/dev/null
 
 section "legacy directory location (.pi/todos -> .pi/pearls)"
 # Pearls used to live in .pi/todos; the walk-up search still finds one, and

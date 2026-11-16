@@ -170,6 +170,15 @@ const TodoParams = Type.Object({
 	),
 	force: Type.Optional(Type.Boolean({ description: "Override another session's assignment" })),
 	type: Type.Optional(StringEnum(["todo", "memory"] as const, { description: "Type of entry: 'todo' (default) or 'memory'. Determines whether this is a task or a persistent memory note." })),
+	filterTags: Type.Optional(
+		Type.Array(
+			Type.String({ description: "Tag a pearl must carry to be listed" }),
+		),
+		{
+			description:
+				"For list/list-all/list-memories: only return pearls that carry ALL of these tags (create/update ignore this and use 'tags')",
+		},
+	),
 	days: Type.Optional(
 		Type.Integer({
 			minimum: 0,
@@ -239,6 +248,17 @@ function normalizeTodoId(id: string): string {
 
 function displayTodoIdFor(todo: TodoFrontMatter): string {
 	return formatTodoId(todo.id, todo.type);
+}
+
+/**
+ * Keep only pearls carrying every requested tag (AND semantics). Used by
+ * the list/list-all/list-memories tool actions via the filterTags param.
+ */
+export function filterTodosByTags<T extends { tags?: string[] }>(todos: T[], filterTags?: string[]): T[] {
+	if (!filterTags || filterTags.length === 0) return todos;
+	const wanted = filterTags.map((t) => t.trim()).filter(Boolean);
+	if (wanted.length === 0) return todos;
+	return todos.filter((t) => wanted.every((tag) => (t.tags ?? []).includes(tag)));
 }
 
 export function validateTodoId(id: string): { id: string } | { error: string } {
@@ -2068,7 +2088,8 @@ export default function todosExtension(pi: ExtensionAPI) {
 			"Title is the short summary; body is long-form markdown notes (update replaces, append adds). " +
 			"Todo ids are shown as TODO-<hex>; id parameters accept TODO-<hex> or the raw hex filename. " +
 			"Claim tasks before working on them to avoid conflicts, and close them when complete. " +
-			"Action \"archive\" archives pearls closed longer than archiveDays (or a given number of days) on demand.",
+			"Action \"archive\" archives pearls closed longer than archiveDays (or a given number of days) on demand. " +
+			"Actions list/list-all/list-memories accept filterTags to return only pearls carrying all of those tags.",
 		parameters: TodoParams,
 
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -2078,7 +2099,10 @@ export default function todosExtension(pi: ExtensionAPI) {
 			switch (action) {
 				case "list": {
 					const allTodos = await listTodos(todosDir);
-					const todos = allTodos.filter((t) => t.type !== "memory");
+					const todos = filterTodosByTags(
+						allTodos.filter((t) => t.type !== "memory"),
+						params.filterTags,
+					);
 					const { assignedTodos, openTodos } = splitTodosByAssignment(todos);
 					const listedTodos = [...assignedTodos, ...openTodos];
 					const currentSessionId = ctx.sessionManager.getSessionId();
@@ -2090,7 +2114,10 @@ export default function todosExtension(pi: ExtensionAPI) {
 
 				case "list-all": {
 					const allTodos = await listTodos(todosDir);
-					const todos = allTodos.filter((t) => t.type !== "memory");
+					const todos = filterTodosByTags(
+						allTodos.filter((t) => t.type !== "memory"),
+						params.filterTags,
+					);
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(todos) }],
@@ -2100,7 +2127,10 @@ export default function todosExtension(pi: ExtensionAPI) {
 
 				case "list-memories": {
 					const allTodos = await listTodos(todosDir);
-					const memories = allTodos.filter((t) => t.type === "memory");
+					const memories = filterTodosByTags(
+						allTodos.filter((t) => t.type === "memory"),
+						params.filterTags,
+					);
 					const currentSessionId = ctx.sessionManager.getSessionId();
 					return {
 						content: [{ type: "text", text: serializeTodoListForAgent(memories) }],

@@ -69,8 +69,10 @@ Requires Node ≥ 20.
 
 ```sh
 pearls help                                    # list commands
+pearls                                        # no command = same as 'pearls list'
 pearls create "Write README" --tag docs        # create a todo
 pearls list                                    # human output
+pearls list --tag docs                        # only todos tagged docs (repeatable: AND)
 pearls list --json                             # machine-readable (matches Pi tool output)
 pearls list-tags                               # count tags, like sort | uniq -c
 pearls search -f readme                        # fuzzy-search open todos
@@ -119,8 +121,8 @@ Storage settings live in `<todos-dir>/settings.json`:
 
 | Command                 | Notes                                                                |
 | ----------------------- | -------------------------------------------------------------------- |
-| `list`                  | Open + assigned todos (default). Closed todos are hidden at every level of the tree, children of an epic included. |
-| `list-all`              | Includes closed. A closed child is shown nested under its epic, not repeated as a flat entry. `--archived` also includes the archive. |
+| `list`                  | Open + assigned todos (default). Closed todos are hidden at every level of the tree, children of an epic included. `--tag <t>` (repeatable) filters to todos carrying every given tag. |
+| `list-all`              | Includes closed. A closed child is shown nested under its epic, not repeated as a flat entry. `--archived` also includes the archive. `--tag <t>` (repeatable) filters like on `list`. |
 | `list-tags` / `tags`    | Counts tags on open + assigned todos, like `sort | uniq -c`. Add `--closed` to include closed todos; `--archived` also includes the archive. `--json` emits entries like `{"tag":"docs","count":2}`. |
 | `search <query…>`       | Fuzzy-search by id / title / tags / status / assignment. Prints `T<id>  <title>` per match. Add `--closed` to include closed todos; add `--json` for the same shape as `list --json`. |
 | `get <id>` / `show <id>`| Single todo, body included.                                          |

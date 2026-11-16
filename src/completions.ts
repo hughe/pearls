@@ -94,11 +94,14 @@ _pearls() {
 		arguments)
 			case \${words[1]} in
 				list)
-					_arguments '--json[emit stable JSON output]'
+					_arguments \\
+						'--tag[filter by tag (repeatable, AND)]:tag' \\
+						'--json[emit stable JSON output]'
 					;;
 				list-all)
 					_arguments \\
 						'--archived[include archived todos]' \\
+						'--tag[filter by tag (repeatable, AND)]:tag' \\
 						'--json[emit stable JSON output]'
 					;;
 				list-tags|tags)
@@ -205,6 +208,11 @@ _pearls() {
 				summarize-memories)
 					_arguments \\
 						'--closed[include closed memories]' \\
+						'--json[emit stable JSON output]'
+					;;
+				memories)
+					_arguments \\
+						'--tag[filter by tag (repeatable, AND)]:tag' \\
 						'--json[emit stable JSON output]'
 					;;
 				completions)

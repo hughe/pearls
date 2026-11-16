@@ -245,6 +245,18 @@ function getTags(flags: Record<string, string | boolean>): string[] | undefined 
 	return v.split("\n").map((t) => t.trim()).filter(Boolean);
 }
 
+/**
+ * Keep only todos carrying every requested tag (AND semantics). Used by
+ * list / list-all / memories, whose --tag flag filters instead of writing.
+ */
+function filterByTags(
+	todos: TodoFrontMatter[],
+	tags: string[] | undefined,
+): TodoFrontMatter[] {
+	if (!tags || tags.length === 0) return todos;
+	return todos.filter((t) => tags.every((tag) => (t.tags ?? []).includes(tag)));
+}
+
 function getPriority(
 	flags: Record<string, string | boolean>,
 ): number | undefined {
@@ -383,6 +395,8 @@ const HELP = `pearls — agent-friendly todos (compatible with Pi's todo extensi
 
 USAGE
   pearls [global-flags] <command> [flags] [args]
+  pearls                      # with no command, same as 'pearls list'
+  pearls help                 # full command reference
 
 GLOBAL FLAGS
   --pearls-dir <path>    Override the todos directory (default: walk up from
@@ -408,10 +422,12 @@ GLOBAL FLAGS
 COMMANDS
   list                   List open + assigned todos (default human output).
                          Closed todos are hidden whether they are top-level
-                         or children of an epic.
+                         or children of an epic. --tag <t> (repeatable)
+                         filters to todos carrying every given tag.
   list-all               List every todo including closed. Add --archived to
                          include todos 'pearls archive' has moved to
-                         <todos-dir>/archive.
+                         <todos-dir>/archive. --tag <t> (repeatable)
+                         filters like on list.
   list-tags              Count tags on open + assigned todos, like
                          'sort | uniq -c'. Add --closed to include closed
                          todos; --archived folds in the archive too.
@@ -457,7 +473,8 @@ COMMANDS
   release <id>           Release the current session's assignment. --force
                          to release someone else's.
   memories               List memories (same format as list, but filtered
-                         to type=Memory entries).
+                         to type=Memory entries). --tag <t> (repeatable)
+                         filters like on list.
   dir                    Print the resolved todos directory.
   path <id>              Print the absolute path to a todo's .md file.
   view <id> [mdv-args]   Open the pearl in mdv, which renders it in your
@@ -514,6 +531,8 @@ EXAMPLES
   pearls search -f readme              # open/assigned todos mentioning "readme"
   pearls search -f readme --closed     # include closed ones too
   pearls list-tags                     # count tags on open/assigned todos
+  pearls list --tag docs               # only todos tagged docs
+  pearls list --tag docs --tag readme  # todos carrying BOTH tags
   pearls search -p 0                   # only priority-0 todos
   pearls search -c Tdeadbeef           # children of Tdeadbeef
   pearls append Tdeadbeef --stdin-body < notes.md
@@ -571,6 +590,7 @@ INSPECTING / SEARCHING
   pearls search -f <query>        # fuzzy match across id/title/tags/status
   pearls search -f <query> --closed  # include closed todos
   pearls list-tags                # see which tags are in use
+  pearls list --tag docs          # only pearls tagged docs (repeatable: AND)
   pearls search -p 0              # priority 0 todos
   pearls search -c T<id>          # children of <id>
   pearls list-all                 # everything, including closed
@@ -665,11 +685,14 @@ async function main(argv: string[]): Promise<void> {
 		await endOutput();
 		return;
 	}
-	if (parsed.flags.help || parsed.command === "help" || parsed.command === undefined) {
+	if (parsed.flags.help || parsed.command === "help") {
 		out(HELP);
 		await endOutput();
 		return;
 	}
+	// Bare `pearls` lists, like `git status`-style zero-arg commands; --help
+	// and `help` above are the explicit ways to see the reference.
+	parsed.command ??= "list";
 
 	// Resolve todos dir. --pearls-dir sets PEARLS_DIR (highest priority).
 	// --todo-dir and PI_TODO_PATH are deprecated aliases; warn when used.
@@ -796,7 +819,10 @@ async function cmdList(
 	if (run.flags.archived) {
 		allTodos.push(...(await listTodos(getTodoArchiveDir(run.todosDir))));
 	}
-	const todos = allTodos.filter((t) => t.type !== "memory");
+	const todos = filterByTags(
+		allTodos.filter((t) => t.type !== "memory"),
+		getTags(run.flags),
+	);
 	const listed = opts.includeClosed
 		? todos
 		: (() => {
@@ -866,7 +892,10 @@ async function cmdListTags(run: RunContext): Promise<void> {
 
 async function cmdMemories(run: RunContext): Promise<void> {
 	const allTodos = await listTodos(run.todosDir);
-	const memories = allTodos.filter((t) => t.type === "memory");
+	const memories = filterByTags(
+		allTodos.filter((t) => t.type === "memory"),
+		getTags(run.flags),
+	);
 
 	if (run.json) {
 		printJsonList(memories);

@@ -25,7 +25,7 @@ results to the user in natural language.
 
 When the user types a `/pearls` command:
 
-- **`/pearls`** (no arguments) → run `pearls list --json` and summarize the results
+- **`/pearls`** (no arguments) → run `pearls list --json` and summarize the results (bare `pearls` in a shell is likewise shorthand for `pearls list`; `pearls help` shows the full reference)
 - **`/pearls rem`** → open the memory creation input in Pi, or create a memory from the CLI
 - **`/pearls help`** → explain the available commands and how to use them
 - **`/pearls <command> [args]`** → run the corresponding `pearls` CLI command
@@ -40,6 +40,7 @@ When the user asks you to remember something:
 | What | Command |
 |------|----------|
 | See open tasks | `pearls list --json` |
+| See tasks by tag | `pearls list --tag <tag> --json` (repeatable; AND semantics) |
 | See all tasks | `pearls list-all --json` |
 | Create a task | `pearls create "Title" --json [flags]` |
 | View a task | `pearls get <id> --json` |
@@ -94,6 +95,11 @@ pearls list --json
 
 The JSON contains three buckets: `assigned` (claimed by a session),
 `open` (unclaimed), and `closed`. Focus on `open` and `assigned`.
+
+To narrow by tag, add `--tag <tag>` (repeatable — a pearl must carry all
+of them): `pearls list --tag docs --json`. The same flag works on
+`list-all` and `memories`. The Pi `pearls` tool's `list` / `list-all` /
+`list-memories` actions take an equivalent `filterTags` array.
 
 ### Creating a task
 
