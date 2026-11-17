@@ -112,10 +112,9 @@ Storage settings live in `<todos-dir>/settings.json`:
 - `archiveDays` (default `30`) — how long after `closed_at` a pearl is
   eligible for `pearls archive`. `gcDays` is accepted as a legacy alias.
   Todos closed before `closed_at` existed fall back to `created_at`.
-- `layout` (default `"frontmatter"`) — which on-disk layout new writes
-  use: `"frontmatter"` (JSON at the top) or `"footer"` (markdown first,
-  JSON at the bottom after a `---` separator). Managed by
-  `pearls migrate-layout`; both layouts are always readable.
+
+(A retired `layout` key from before the YAML cutover is ignored and
+removed by `migrate-layout` if present.)
 
 ## Commands
 
@@ -141,7 +140,7 @@ Storage settings live in `<todos-dir>/settings.json`:
 | `mdv <id> [mdv-args]`   | Alias for `view`.                                                     |
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
 | `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. Also moves a legacy `.pi/todos/` directory to `.pi/pearls/`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
-| `migrate-layout`        | Move the JSON metadata block of every pearl between the two on-disk layouts: `--to frontmatter` (default: JSON at the top) or `--to footer` (markdown body first, JSON after a `---` separator at the bottom). `--dry-run` previews. Also updates `settings.json` so future writes use the chosen layout. Both layouts are always readable, so the directory keeps working during and after the switch. |
+| `migrate-layout`     | Bring every pearl up to the canonical YAML front matter format. Legacy layouts — a bare JSON metadata block at the top of the file, or a JSON footer after a trailing `---` separator — are still read indefinitely; this command bulk-rewrites them between `---` fences, and drops the stale `layout` key from `settings.json` if present. `--dry-run` previews. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 | `version`               | Print the pearls version (same as `--version`).                       |
 | `completions <shell>`   | Print a shell completion script to stdout. Currently `zsh` (the
@@ -159,27 +158,34 @@ todo deliberately does *not* rename its file; use `reslug` for that.
 
 ## File layout
 
-Each pearl is a markdown file plus a JSON metadata block. Two layouts are
-supported:
+Each pearl is a markdown file with Obsidian-compatible YAML front
+matter. The leading `---` fence is the first three bytes of the file:
 
 ```
-frontmatter (default)      footer
------------------------------------------------------------------
-{                          # Title
-  "id": "…",              body text
-  "title": "…"
-}                          ---
-                           { "id": "…", "title": "…" }
-# Title
-body text
+---
+id: 0f1e2d3c
+title: My note
+tags: [rust, sqlite]
+status: open
+created_at: 2026-11-16T23:31:34Z
+priority: 1
+slug: my-note
+---
+# My note
+
+Body text goes here.
 ```
 
-Reading always supports both layouts, so a directory can mix them freely
-(`migrate-layout` rewrites every pearl and records the choice in
-`settings.json` so future writes match). The footer layout puts the
-human-readable text first. It is flagged experimental only because it is
-new — the CLI and the Pi extension share the same reader, so everything
-understands both layouts.
+Unset fields are omitted entirely. Datetimes are UTC in Obsidian style,
+`YYYY-MM-DDTHH:mm:ssZ`. The `# Title` heading that opens the body is
+cosmetic (nice to read and render); the front matter `title` is the
+canonical one.
+
+Two legacy layouts — a bare JSON block at the top of the file, and a JSON
+footer after a trailing `---` line — are still read indefinitely, and
+any write rewrites the file as YAML front matter. `migrate-layout`
+bulk-converts a directory (and prunes the retired `layout` key from
+`settings.json`).
 
 ## Shell completions
 

@@ -1,19 +1,16 @@
+---
+id: 859e7cda
+title: "Agent tool: type parameter on create action"
+tags: [memory]
+status: closed
+created_at: 2026-04-30T14:32:37Z
+priority: 1
+parent: b286d44d
+slug: agent-tool-type-parameter-on-create-acti
+---
+
 # Agent tool: type parameter on create action
 
 ## Description
 
 Add `type` parameter to the pearls tool schema (alongside title, body, etc.). When `type: "memory"`, the created entry is a memory. The `list` action should continue to exclude memories (handled by the filter sub-task). Add a new `list-memories` action or similar to let the agent list memories separately.
-
----
-{
-  "id": "859e7cda",
-  "title": "Agent tool: type parameter on create action",
-  "tags": [
-    "memory"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-30T14:32:37.364Z",
-  "priority": 1,
-  "parent": "b286d44d",
-  "slug": "agent-tool-type-parameter-on-create-acti"
-}

@@ -1,124 +1,125 @@
 # Pearl file layout
 
-Every pearl is a single markdown file with a JSON metadata block. The
-metadata is the same object in both layouts; only its position differs.
+Every pearl is a single markdown file with Obsidian-compatible YAML
+front matter. The leading `---` fence is the first three bytes of the
+file:
 
 ```
-frontmatter (default)      footer
------------------------------------------------------------------
-{                          # Title
-  "id": "…",
-  "title": "…",            body text
-  "tags": [ … ]
-}                          ---
-                           { "id": "…", "title": "…", "tags": [ … ] }
-# Title
+---
+id: 0f1e2d3c
+title: My note
+tags: [rust, sqlite]
+status: open
+created_at: 2026-11-16T23:31:34Z
+priority: 1
+slug: my-note
+---
+# My note
+
 body text
 ```
 
-Which layout *new writes* use is decided by the `layout` key in
-`<todos-dir>/settings.json` (`"frontmatter"` is the default;
-`pearls migrate-layout --to footer` flips it and rewrites every pearl,
-`--dry-run` previews). **Reading always supports both layouts**, so a
-directory can mix them freely — during a migration, or forever.
-
-The implementation lives in `extensions/pearls.ts`:
-`splitFrontMatter` dispatches, `splitFooterMatter` handles the footer
-case, and `serializeTodo(todo, layout)` writes either form.
-
 ## Writer rules
 
-Both layouts are emitted in one canonical form:
+The writer emits exactly one canonical form:
 
-| Layout     | Output                                   |
-|------------|------------------------------------------|
-| frontmatter| `{json}\n\n{body}\n` (or `{json}\n` when the body is empty) |
-| footer     | `{body}\n\n---\n{json}\n` (or `---\n{json}\n` when the body is empty) |
+- `---\n{yaml}---\n\n{body}\n` (or `---\n{yaml}---\n` when the body is
+  empty).
+- Only set fields appear; unset ones (`tags`, `priority`, `parent`,
+  `type`, `closed_at`, `assigned_to_session`, `slug`) are omitted
+  entirely.
+- Datetimes (`created_at`, `closed_at`) are UTC in Obsidian style,
+  `YYYY-MM-DDTHH:mm:ssZ` — no milliseconds.
+- `tags` is written as a flow sequence (`tags: [a, b]`).
+- The body is trimmed at both ends and opens with a `# Title` heading.
+  That heading is cosmetic; the front matter `title` is canonical, and
+  `pearls update --title` rewrites the heading to match.
 
-The body is trimmed at both ends before writing. Because the writer
-always re-emits the whole file in canonical form, a hand-edited pearl
-gets normalised the next time pearls writes to it.
+Serialization uses the [`yaml`](https://eemeli.org/yaml/) package, so
+titles needing quoting (colons, `#`, leading dashes, …) are escaped
+correctly.
+
+Because the writer always re-emits the whole file in canonical form, a
+hand-edited pearl is normalised the next time pearls writes to it —
+including a pearl that still sits in a legacy layout.
 
 ## Reader algorithm
 
-The reader must answer one question for a raw file: *where does the JSON
+The reader must answer one question for a raw file: *where does the
 metadata live?* It is deliberately forgiving — an unrecognised file is
-treated as all-body with empty metadata rather than an error, and the id
-always comes from the filename, never the content.
+treated as all-body with empty metadata rather than an error, and the
+id always comes from the filename, never the content.
 
-### Step 1 — dispatch on the first byte
+Three layouts are accepted, indefinitely:
+
+1. **YAML front matter** (canonical) — a `---` fence as the first line
+   of the file, closed by the first later `---` line. The text between
+   the fences is the metadata; everything after the closing fence is
+   the body. Only the *first* closing fence counts, so a body that
+   itself contains `---` lines (markdown hr rules) round-trips fine.
+2. **JSON front matter** (legacy) — a bare `{...}` block at the very
+   top of the file, found with a depth-counting scan
+   (`findJsonObjectEnd`) that tracks string state so braces inside
+   string values don't count as structural.
+3. **JSON footer** (legacy) — the markdown body first, then a trailing
+   `---` line and a single complete JSON object. `splitFooterMatter`
+   searches backwards for the *last* separator line and validates that
+   everything after it is one parseable JSON object.
+
+### Dispatch order
 
 ```
-if content starts with "{" → frontmatter layout
-otherwise                   → try footer layout
+if content starts with a "---" fence line
+     → try YAML front matter (first closing fence wins)
+else if content starts with "{" → JSON front matter
+else                             → try JSON footer
 ```
 
-This is byte one of the original `todos.ts` logic, unchanged, so
-frontmatter files parse exactly as they always have.
+YAML is checked first so a canonical file is never mistaken for a
+body-first (footer) file. A file that starts with `---` but has no
+closing fence falls through to the footer/JSON checks like anything
+else.
 
-### Frontmatter layout
+### Parsing the metadata text
 
-A single forward scan (`findJsonObjectEnd`) walks the file with a
-depth counter while tracking string state (`inString` / `escaped`), so
-braces inside JSON string values don't count as structural. When the
-depth returns to 0, the metadata object ends there.
-
-- Text up to and including that `}` is the metadata.
-- The remainder, with leading newlines stripped, is the body.
-- If no balanced object is found, the whole file is body.
-
-Note there are no `---` fences in this layout — it is bare JSON at the
-top of the file. The `---` in the footer layout is the *only* place the
-separator syntax is used.
-
-### Footer layout
-
-`splitFooterMatter` searches **backwards from the end of the file**:
-
-1. Trim trailing whitespace. Prepend a synthetic `\n` to the search
-   haystack so a file that *begins* with the separator
-   (`---\n{json}` — an empty-body footer pearl) is still found.
-2. Find the last occurrence of the line `\n---` (via `lastIndexOf`).
-   Searching backwards is the key choice: a body that itself contains
-   `---` lines (markdown hr rules, setext underlines) never wins — the
-   *last* separator does.
-3. Validate the candidate is really a separator line: the `---` must be
-   a complete line (the next character is `\n` or EOF), so `----` or
-   `--force` don't match.
-4. Validate the tail after the separator. All three must hold:
-   - it starts with `{`,
-   - `findJsonObjectEnd` returns exactly `len - 1` — one balanced
-     object spans the entire tail, with no trailing junk,
-   - it parses with `JSON.parse`.
-5. If any check fails, resume `lastIndexOf` searching backwards for an
-     earlier `---` candidate. If none validates, the whole file is
-     body (metadata stays empty, and the filename still supplies the
-     id).
-
-On success: the tail is the metadata, and the text before the separator
-line (rtrimmed) is the body.
+`safeMetadataParse` dispatches on the first character of the raw
+metadata text: `{` means legacy JSON (`JSON.parse`), anything else is
+YAML (`YAML.parse` — this is the text *between* the fences, so a YAML
+front matter block never starts with `{`). YAML date scalars that the
+parser resolves to `Date` objects are normalised to ISO strings so the
+shared field validation always sees strings. Any parse failure yields
+empty metadata (with the filename still supplying the id).
 
 ### Why this is safe
 
-The three-part check — *last* separator + full-line `---` + complete
+The footer check — *last* separator + full-line `---` + complete
 parseable JSON object to EOF — means ordinary markdown that happens to
-end with `---` and prose falls through to "all body". A pearl whose body
-contains `---` inside (e.g. between sections) round-trips fine, because
-the writer appends its own separator after the body, making it the last
-one in the file.
+end with `---` and prose falls through to "all body". A YAML-frontmatter
+pearl whose body contains `---` is safe twice over: the fence detector
+stops at the first closing fence, and even if it didn't, the footer
+scanner only accepts a JSON tail.
 
-### Known edge case
+### Known edge cases
 
-A body that *literally ends* with a `---` line followed by a bare JSON
-object is indistinguishable from a real footer by content alone, and
-would be parsed as one. There is no fix for this that doesn't make the
-format more baroque (e.g. fenced metadata), so it is accepted: don't end
-a pearl body with a `---` line plus a JSON object.
+- A body that *literally ends* with a `---` line followed by a bare
+  JSON object is indistinguishable from a real legacy footer by content
+  alone. Accepted: don't end a pearl body that way.
+- A hand-written file that opens with a `---` fence but never closes it
+  is not treated as front matter (the fence pair must be complete).
 
 ## Complexity
 
-Frontmatter detection is a single O(n) pass. Footer detection scans
-backwards; each candidate separator validates with one pass over the
-tail, so worst case is O(k·n) for k `---` candidates — but in practice
-the real separator is at the very end of the file and is found on the
-first `lastIndexOf`, making the common case O(n).
+All three detectors are single O(n) passes (the footer scanner is
+worst-case O(k·n) for k separator candidates, but the real one is at
+the end of the file and is found first). The implementation lives in
+`extensions/pearls.ts`: `splitFrontMatter` dispatches,
+`splitYamlFrontMatter` handles fences, `splitFooterMatter` the legacy
+footer, and `serializeYamlFrontMatter` + `serializeTodo` write the
+canonical form.
+
+## Migrating
+
+Legacy files are read indefinitely, so no migration is *required* — any
+write re-emits the file as YAML front matter. `pearls migrate-layout`
+bulk-converts a directory (including the archive) and prunes the
+retired `layout` key from `settings.json`; `--dry-run` previews.

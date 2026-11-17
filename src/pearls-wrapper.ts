@@ -18,8 +18,6 @@ import * as todo from "../extensions/pearls.js";
 
 export type TodoType = "todo" | "memory";
 
-export type TodoLayout = "frontmatter" | "footer";
-
 export interface TodoFrontMatter {
 	id: string;
 	title: string;
@@ -89,11 +87,12 @@ export const ensureTodosDir: (todosDir: string) => Promise<void> =
 	todo.ensureTodosDir;
 export interface TodoSettings {
 	archiveDays: number;
-	layout: TodoLayout;
 }
 export const readTodoSettings: (
 	todosDir: string,
 ) => Promise<TodoSettings> = todo.readTodoSettings;
+export const getTodoSettingsPath: (todosDir: string) => string =
+	todo.getTodoSettingsPath;
 export const writeTodoSettings: (
 	todosDir: string,
 	settings: TodoSettings,
@@ -122,7 +121,6 @@ export const archiveClosedTodos: (
 export const writeTodoFile: (
 	filePath: string,
 	t: TodoRecord,
-	layout?: TodoLayout,
 ) => Promise<void> = todo.writeTodoFile;
 export const generateTodoId: (todosDir: string) => Promise<string> =
 	todo.generateTodoId;

@@ -1,3 +1,12 @@
+---
+id: 97cc3631
+title: Show children in to-do list.
+status: closed
+created_at: 2026-04-27T18:51:22Z
+priority: 1
+slug: show-children-in-to-do-list
+---
+
 The To-Do List should display children below their parent, indented by two spaces, using ASCII tree characters:
 - `├──` for a middle child
 - `└──` for the last child
@@ -12,14 +21,3 @@ The To-Do List should display children below their parent, indented by two space
 **Orphaned children** (parent closed/deleted): Show them indented but replace tree characters with `¿`.
 
 **No collapse/expand option.** Always show the full tree.
-
----
-{
-  "id": "97cc3631",
-  "title": "Show children in to-do list.",
-  "tags": [],
-  "status": "closed",
-  "created_at": "2026-04-27T18:51:22.988Z",
-  "priority": 1,
-  "slug": "show-children-in-to-do-list"
-}

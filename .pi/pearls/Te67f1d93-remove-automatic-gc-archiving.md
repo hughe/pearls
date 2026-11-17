@@ -1,3 +1,13 @@
+---
+id: e67f1d93
+title: Remove automatic GC/archiving
+tags: [feature, archive]
+status: closed
+created_at: 2026-11-06T15:58:22Z
+priority: 1
+slug: remove-automatic-gc-archiving
+---
+
 # Remove automatic GC/archiving
 
 ## Description
@@ -25,17 +35,3 @@ Automatic GC/archiving removed entirely (v0.10.0, 304/304 checks on tsx and dist
 - **CLI**: startup GC gone; `--no-gc` kept as a documented deprecated no-op (still parses as a boolean so existing scripts don't break). `pearls archive` defaults to `archiveDays`. Help/quickstart/completions updated.
 - **Tests**: "archive on gc" section replaced by "no automatic archiving" (startup moves nothing, no archive dir created, then on-demand archive over legacy settings preserves the M-prefix/created_at-fallback coverage); archive-command section uses legacy `gcDays` settings to prove the alias.
 - **Docs**: README, SKILL.md; repo settings.json now `{ "archiveDays": 30, "layout": "footer" }`.
-
----
-{
-  "id": "e67f1d93",
-  "title": "Remove automatic GC/archiving",
-  "tags": [
-    "feature",
-    "archive"
-  ],
-  "status": "closed",
-  "created_at": "2026-11-06T15:58:22.983Z",
-  "priority": 1,
-  "slug": "remove-automatic-gc-archiving"
-}

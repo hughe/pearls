@@ -1,3 +1,15 @@
+---
+id: dc019010
+title: "Slug derivation: --slug flag, sanitiser, and slug front-matter field"
+tags: [naming, cli]
+status: closed
+created_at: 2026-08-13T21:48:36Z
+priority: 1
+parent: cec97615
+closed_at: 2026-08-13T22:34:43Z
+slug: slug-derivation-slug-flag-sanitiser-and
+---
+
 # Slug derivation: --slug flag, sanitiser, and slug front-matter field
 
 ## Description
@@ -56,19 +68,3 @@ through write/read without disturbing files that do not use it.
 the same sanitiser, so `--slug ../../etc/passwd` lands as `etc-passwd`
 rather than escaping the directory. The `slug` field is parsed and written
 only when set, so files that predate it are untouched.
-
----
-{
-  "id": "dc019010",
-  "title": "Slug derivation: --slug flag, sanitiser, and slug front-matter field",
-  "tags": [
-    "naming",
-    "cli"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:48:36.279Z",
-  "priority": 1,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:43.490Z",
-  "slug": "slug-derivation-slug-flag-sanitiser-and"
-}

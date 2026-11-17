@@ -1,3 +1,13 @@
+---
+id: a229b3c4
+title: Disable automatic archiving; add archive command to CLI and Pi module
+tags: [feature, archive]
+status: closed
+created_at: 2026-11-06T15:39:27Z
+priority: 1
+slug: disable-automatic-archiving-add-archive
+---
+
 # Disable automatic archiving; add archive command to CLI and Pi module
 
 ## Description
@@ -30,17 +40,3 @@ Implemented in this session (all 303 CLI checks pass, tsx + dist builds):
 - **CLI**: `pearls archive [--days <n>] [--dry-run] [--json]` — bulk command, takes no id. N defaults to `gcDays` from settings.json. Help, quickstart and zsh completions updated.
 - **Disabling automatic archiving**: documented that `"gc": false` in settings.json is the switch, and set it in this repo's own `.pi/pearls/settings.json`.
 - README, SKILL.md updated; tests added in test/cli.sh; version bumped 0.8.3 → 0.9.0.
-
----
-{
-  "id": "a229b3c4",
-  "title": "Disable automatic archiving; add archive command to CLI and Pi module",
-  "tags": [
-    "feature",
-    "archive"
-  ],
-  "status": "closed",
-  "created_at": "2026-11-06T15:39:27.281Z",
-  "priority": 1,
-  "slug": "disable-automatic-archiving-add-archive"
-}

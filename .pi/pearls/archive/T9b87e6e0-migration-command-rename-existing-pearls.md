@@ -1,3 +1,15 @@
+---
+id: 9b87e6e0
+title: "Migration command: rename existing pearls into the new scheme"
+tags: [naming, cli, migration]
+status: closed
+created_at: 2026-08-13T21:49:23Z
+priority: 1
+parent: cec97615
+closed_at: 2026-08-13T22:34:51Z
+slug: migration-command-rename-existing-pearls
+---
+
 # Migration command: rename existing pearls into the new scheme
 
 ## Description
@@ -75,20 +87,3 @@ git, second run a no-op.
 Not done: back-filling `closed_at` from `created_at`. It would write a
 timestamp we do not actually know, and the fallback in TODO-90066643
 handles those pearls correctly anyway.
-
----
-{
-  "id": "9b87e6e0",
-  "title": "Migration command: rename existing pearls into the new scheme",
-  "tags": [
-    "naming",
-    "cli",
-    "migration"
-  ],
-  "status": "closed",
-  "created_at": "2026-08-13T21:49:23.680Z",
-  "priority": 1,
-  "parent": "cec97615",
-  "closed_at": "2026-08-13T22:34:51.422Z",
-  "slug": "migration-command-rename-existing-pearls"
-}

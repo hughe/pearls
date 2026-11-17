@@ -53,7 +53,7 @@ When the user asks you to remember something:
 | Claim a task | `pearls claim <id> --json` |
 | Release a task | `pearls release <id> --json` |
 | Delete a task | `pearls delete <id> --json` |
-| Change file layout | `pearls migrate-layout --to footer` (or `frontmatter`; rewrites all pearls) |
+| Convert to YAML front matter | `pearls migrate-layout` (rewrites legacy JSON pearls; optional) |
 | Rename a task's file | `pearls reslug <id>` |
 | Refine a task | `pearls refine <id> --json` |
 | Create a memory | `pearls create "Title" --type memory --json --body "Full text"` |
@@ -79,11 +79,12 @@ archives pearls closed for `archiveDays` days — `gcDays` is accepted as a
 legacy alias — and `--days <n>` overrides on the command line.
 `pearls list-all --archived` includes archived pearls.
 
-Each pearl file is markdown plus a JSON metadata block. The block lives at
-the top (frontmatter, the default) or at the bottom after a `---` separator
-(footer); both layouts are always readable and may be mixed, and
-`pearls migrate-layout --to <frontmatter|footer>` rewrites every pearl and
-updates `settings.json` so future writes match.
+Each pearl file is markdown with Obsidian-compatible YAML front matter:
+it opens with a `---` fence, the metadata, a closing `---`, then the
+markdown body. Two legacy layouts (a bare JSON block at the top, or a
+JSON footer at the bottom) are still read indefinitely; any write
+rewrites the file as YAML front matter, and `pearls migrate-layout`
+bulk-converts a directory.
 
 ## Workflow
 

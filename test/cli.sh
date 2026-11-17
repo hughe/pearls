@@ -191,15 +191,23 @@ FILE="$(pearls path "$ID")"
 assert_eq "$(basename "$FILE")" "T$ID-write-docs.md" "filename is T<hex>-<slug>.md"
 
 section "on-disk file format"
-first_char="$(head -c1 "$FILE")"
-assert_eq "$first_char" "{" "file starts with JSON front matter"
-# The JSON object ends at some '}', followed by blank line, then body.
-# Just check that both halves are present.
-assert_contains "$(cat "$FILE")" "\"id\": \"$ID\"" "front matter contains id"
-assert_contains "$(cat "$FILE")" "\"title\": \"Write docs\"" "front matter contains title"
+assert_eq "$(head -c3 "$FILE")" "---" "file opens with the --- YAML front matter fence"
+assert_eq "$(head -1 "$FILE")" "---" "first line is exactly ---"
+assert_contains "$(cat "$FILE")" "id: $ID" "front matter contains id"
+assert_contains "$(cat "$FILE")" "title: Write docs" "front matter contains title"
+assert_contains "$(cat "$FILE")" "tags: [docs, readme]" "front matter contains flow-style tags"
+assert_contains "$(cat "$FILE")" "created_at: " "front matter contains created_at"
+assert_contains "$(cat "$FILE")" "status: open" "front matter contains status"
 assert_contains "$(cat "$FILE")" "Initial body." "body section present"
 assert_contains "$(cat "$FILE")" "# Write docs" "body starts with title heading"
 assert_contains "$(cat "$FILE")" "## Description" "body has Description subheading"
+# Unset fields are omitted entirely: this pearl has no priority/parent/type.
+assert_not_contains "$(sed -n '/^---$/,/^---$/p' "$FILE")" "priority" "unset fields are omitted (priority)"
+assert_not_contains "$(sed -n '/^---$/,/^---$/p' "$FILE")" "parent" "unset fields are omitted (parent)"
+# Datetimes are UTC Obsidian style: YYYY-MM-DDTHH:mm:ssZ, no milliseconds.
+grep -qE 'created_at: [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$FILE" \
+	&& pass "created_at is Obsidian-style UTC (YYYY-MM-DDTHH:mm:ssZ)" \
+	|| fail "created_at is Obsidian-style UTC (YYYY-MM-DDTHH:mm:ssZ)"
 
 section "create (--json shape)"
 out="$(pearls create "Second task" --tag qa --json)"
@@ -570,8 +578,8 @@ CHILD_ID="$(printf '%s' "$out" | sed -n 's/.*"id": "[TM]\([a-f0-9]\{8\}\)".*/\1/
 [[ ${#CHILD_ID} -eq 8 ]] && pass "child id parsed ($CHILD_ID)" || fail "child id parsed"
 
 CHILD_FILE="$(pearls path "$CHILD_ID")"
-assert_contains "$(cat "$CHILD_FILE")" '"priority": 2' "front matter contains priority"
-assert_contains "$(cat "$CHILD_FILE")" "\"parent\": \"$ID\"" "front matter contains parent"
+assert_contains "$(cat "$CHILD_FILE")" "priority: 2" "front matter contains priority"
+assert_contains "$(cat "$CHILD_FILE")" "parent: $ID" "front matter contains parent"
 
 # Human output renders both new fields.
 out="$(pearls get "TODO-$CHILD_ID")"
@@ -1200,93 +1208,101 @@ assert_status 2 "archive with an id argument exits 2" pearls --pearls-dir "$ARDI
 assert_status 2 "archive with a bad --days exits 2" pearls --pearls-dir "$ARDIR" archive --days -1
 
 
-section "layout migration (frontmatter <-> footer)"
-# Layout = where the JSON metadata block lives. Default is frontmatter
-# (JSON at the top); 'migrate-layout --to footer' moves it below a ---
-# separator at the end of the file. Reading always supports both.
-LAYOUT_ID="$(pearls create 'Footer experiment' --body 'Body line one' | extract_id)"
+section "migrate-layout (legacy JSON -> YAML front matter)"
+# migrate-layout bulk-converts legacy layouts — bare JSON at the top, or a
+# JSON footer after a trailing --- — to the canonical YAML front matter.
+# Legacy files are always readable, so the command is never required.
+LAYOUT_ID="$(pearls create 'Migration target' --body 'Body line one' | extract_id)"
 LAYOUT_FILE="$(pearls path "$LAYOUT_ID")"
+assert_eq "$(head -c3 "$LAYOUT_FILE")" "---" "new files are already YAML front matter"
 
-head -c 1 "$LAYOUT_FILE" | grep -q '{' \
-	&& pass "default layout puts JSON at the top" \
-	|| fail "default layout puts JSON at the top"
-
-out="$(pearls migrate-layout --dry-run --to footer)"
-assert_contains "$out" "would rewrite" "dry run reports planned rewrites"
-assert_contains "$out" "settings.json layout would become" "dry run reports settings change"
-head -c 1 "$LAYOUT_FILE" | grep -q '{' \
-	&& pass "dry run leaves files untouched" \
-	|| fail "dry run leaves files untouched"
-
-assert_status 2 "missing --to exits 2" pearls migrate-layout
-assert_status 2 "invalid --to exits 2" pearls migrate-layout --to sideways
-
-out="$(pearls migrate-layout --to footer)"
-assert_contains "$out" "file(s) to footer" "migration rewrites the files"
-assert_contains "$out" 'settings.json layout set to "footer"' "migration reports settings change"
-assert_contains "$(head -1 "$LAYOUT_FILE")" "# Footer experiment" \
-	"footer layout puts markdown body first"
-grep -q '"slug": "footer-experiment"' "$LAYOUT_FILE" \
-	&& pass "footer layout ends with the JSON metadata" \
-	|| fail "footer layout ends with the JSON metadata"
-grep -qx -- '---' "$LAYOUT_FILE" \
-	&& pass "footer layout has a --- separator line" \
-	|| fail "footer layout has a --- separator line"
-
-# Data must round-trip through the migration unchanged.
-assert_contains "$(pearls get "$LAYOUT_ID" --json)" '"title": "Footer experiment"' \
-	"get still resolves after footer migration"
-assert_contains "$(pearls list)" "Footer experiment" "list still shows footer-layout todo"
-
-# Backward compatibility: a file still in the old frontmatter layout is
-# read fine while the directory is in footer mode.
-cat > "$PEARLS_DIR/T0badf00d-old-layout.md" <<'OLDFM'
+# Two legacy relics: bare-JSON-at-top and JSON footer.
+cat > "$PEARLS_DIR/T0badf00d-old-fm.md" <<'OLDFM'
 {
   "id": "0badf00d",
   "title": "Frontmatter relic",
-  "tags": [],
+  "tags": ["old"],
   "status": "open",
   "created_at": "2026-01-01T00:00:00.000Z",
-  "slug": "old-layout"
+  "priority": 2,
+  "slug": "old-fm"
 }
 
 # Frontmatter relic
+
+body of the relic
 OLDFM
+cat > "$PEARLS_DIR/T1facefee-old-footer.md" <<'OLDFF'
+# Footer relic
+
+footer body
+
+---
+{ "id": "1facefee", "title": "Footer relic", "tags": ["x"], "status": "open", "created_at": "2026-02-02T10:00:00.000Z", "slug": "old-footer" }
+OLDFF
 assert_contains "$(pearls get 0badf00d --json)" '"title": "Frontmatter relic"' \
-	"frontmatter file readable in footer mode"
-assert_contains "$(pearls list)" "Frontmatter relic" "mixed layouts list together"
+	"legacy JSON-frontmatter file is readable"
+assert_contains "$(pearls get 1facefee --json)" '"title": "Footer relic"' \
+	"legacy JSON-footer file is readable"
+assert_contains "$(pearls list)" "Frontmatter relic" "legacy files mix into list"
 
-# Ordinary writes honor the settings.json layout.
-pearls update "$LAYOUT_ID" --title 'Footer experiment renamed' >/dev/null
+# A stale settings.json with the retired layout key gets pruned.
+printf '{\n  "archiveDays": 30,\n  "layout": "footer"\n}\n' > "$PEARLS_DIR/settings.json"
+
+out="$(pearls migrate-layout --dry-run)"
+assert_contains "$out" "old-fm.md" "dry run lists the JSON-frontmatter relic"
+assert_contains "$out" "old-footer.md" "dry run lists the JSON-footer relic"
+assert_contains "$out" "would rewrite 2 file(s)" "dry run counts planned rewrites"
+assert_contains "$out" "would remove the stale" "dry run reports the settings prune"
+head -c3 "$PEARLS_DIR/T0badf00d-old-fm.md" | grep -q '{' \
+	&& pass "dry run leaves files untouched" \
+	|| fail "dry run leaves files untouched"
+grep -q '"layout": "footer"' "$PEARLS_DIR/settings.json" \
+	&& pass "dry run leaves settings.json untouched" \
+	|| fail "dry run leaves settings.json untouched"
+
+out="$(pearls migrate-layout)"
+assert_contains "$out" "rewrote 2 file(s) to YAML front matter" "migration rewrites the legacy files"
+assert_contains "$out" "already in YAML front matter" "migration reports untouched files"
+assert_contains "$out" "removed the stale" "migration reports the settings prune"
+assert_eq "$(head -c3 "$PEARLS_DIR/T0badf00d-old-fm.md")" "---" "frontmatter relic became YAML"
+assert_eq "$(head -c3 "$PEARLS_DIR/T1facefee-old-footer.md")" "---" "footer relic became YAML"
+assert_contains "$(cat "$PEARLS_DIR/T0badf00d-old-fm.md")" "title: Frontmatter relic" \
+	"data survives the migration (title)"
+assert_contains "$(cat "$PEARLS_DIR/T0badf00d-old-fm.md")" "tags: [old]" \
+	"data survives the migration (tags)"
+assert_contains "$(cat "$PEARLS_DIR/T0badf00d-old-fm.md")" "priority: 2" \
+	"data survives the migration (priority)"
+assert_contains "$(cat "$PEARLS_DIR/T0badf00d-old-fm.md")" "body of the relic" \
+	"data survives the migration (body)"
+assert_contains "$(cat "$PEARLS_DIR/T0badf00d-old-fm.md")" "created_at: 2026-01-01T00:00:00Z" \
+	"migration normalises datetimes to Obsidian style"
+assert_contains "$(pearls get 0badf00d --json)" '"title": "Frontmatter relic"' \
+	"get still resolves after migration"
+assert_not_contains "$(cat "$PEARLS_DIR/settings.json")" 'layout' \
+	"settings.json no longer carries a layout key"
+
+# Ordinary writes keep YAML front matter going forward.
+pearls update "$LAYOUT_ID" --title 'Migration target renamed' >/dev/null
 pearls append "$LAYOUT_ID" --body 'Body line two' >/dev/null
-pearls create 'Born in footer mode' >/dev/null
-BORN_FILE="$(ls "$PEARLS_DIR"/T*-born-in-footer-mode.md)"
-assert_contains "$(head -1 "$BORN_FILE")" "# Born in footer mode" \
-	"create writes footer layout after migration"
-assert_contains "$(head -1 "$LAYOUT_FILE")" "# Footer experiment" \
-	"update/append preserve footer layout"
+assert_eq "$(head -c3 "$LAYOUT_FILE")" "---" "update/append preserve YAML front matter"
 assert_contains "$(pearls get "$LAYOUT_ID" --json)" 'Body line two' \
-	"append lands in the body above the footer metadata"
+	"append lands in the body"
 
-# A body that itself contains a --- line must not confuse the parser.
-# A body that itself contains a --- line must not confuse the parser.
+# A body that itself contains a --- line must not confuse the parser:
+# the reader takes the first closing fence, writes keep the body intact.
 printf 'intro\n\n---\n\nnot metadata\n' > "$WORK/weird-body.md"
 WEIRD_ID="$(pearls create 'Weird dashes' --body-file "$WORK/weird-body.md" | extract_id)"
 assert_contains "$(pearls get "$WEIRD_ID" --json)" 'not metadata' \
-	"body containing --- stays intact in footer mode"
+	"body containing --- stays intact"
+assert_contains "$(cat "$(pearls path "$WEIRD_ID")")" 'not metadata' \
+	"body containing --- survives on disk"
 
-# And back to frontmatter.
-out="$(pearls migrate-layout --to frontmatter)"
-assert_contains "$out" "settings.json layout set to \"frontmatter\"" "migration back reports settings change"
-head -c 1 "$LAYOUT_FILE" | grep -q '{' \
-	&& pass "migrate back restores JSON-at-top layout" \
-	|| fail "migrate back restores JSON-at-top layout"
-assert_contains "$(pearls get "$LAYOUT_ID" --json)" 'Body line two' \
-	"body survives the round trip"
-out="$(pearls migrate-layout --to frontmatter --dry-run)"
+# A second run is a no-op.
+out="$(pearls migrate-layout --dry-run)"
 assert_contains "$out" "would rewrite 0 file(s)" "second layout migration is a no-op"
-assert_contains "$(cat "$PEARLS_DIR/settings.json")" '"layout": "frontmatter"' \
-	"settings.json carries the layout key"
+assert_contains "$(pearls migrate-layout --json)" '"settingsUpdated": false' \
+	"--json reports settingsUpdated"
 
 section "completions"
 out="$(pearls completions zsh)"

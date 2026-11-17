@@ -1,20 +1,21 @@
 /**
- * `pearls migrate-layout` — move the JSON metadata block of every pearl
- * between the two on-disk layouts:
+ * `pearls migrate-layout` — bring every pearl up to the canonical YAML
+ * front matter format:
  *
- *   frontmatter (default)      footer (experimental)
- *   -------------------       --------------------
- *   {                          # Title
- *     "id": ...                body text
- *   }
- *                              ---
- *   # Title                    { "id": ... }
+ *   ---
+ *   title: My note
+ *   tags: [rust, sqlite]
+ *   created_at: 2026-11-16T23:31:34Z
+ *   ---
+ *   # My note
  *   body text
  *
- * The reader supports both layouts everywhere, so a directory can contain
- * a mix at any time; migration is cosmetic. Running it also flips the
- * `layout` key in settings.json so subsequent writes (create, update,
- * append, claim, ...) keep producing files in the chosen layout.
+ * Files still in a legacy layout — a bare JSON block at the top of the
+ * file, or a JSON footer after a trailing `---` separator — are read
+ * transparently and rewritten here. The reader keeps supporting the
+ * legacy layouts indefinitely, so this command is never required; it
+ * just bulk-converts a directory so every file looks the same. It also
+ * drops the stale `layout` key from settings.json if it is still there.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -22,37 +23,41 @@ import path from "node:path";
 import {
 	ensureTodoExists,
 	getTodoArchiveDir,
+	getTodoSettingsPath,
 	parseTodoFileName,
 	readTodoSettings,
 	withTodoLock,
 	writeTodoFile,
 	writeTodoSettings,
 	type CliExtensionContextLike,
-	type TodoLayout,
 } from "./pearls-wrapper.js";
 
 export interface MigrateLayoutOptions {
 	todosDir: string;
 	ctx: CliExtensionContextLike;
-	to: TodoLayout;
 	dryRun?: boolean;
 }
 
 export interface MigrateLayoutResult {
-	/** Files rewritten to the target layout (basenames, in processing order). */
+	/** Files rewritten to YAML front matter (basenames, in processing order). */
 	migrated: { file: string; archived: boolean }[];
-	/** Files already in the target layout, left untouched. */
+	/** Files already in YAML front matter form, left untouched. */
 	unchanged: number;
 	errors: string[];
-	/** The layout written to settings.json ("dry-run" when --dry-run). */
-	settings: TodoLayout | "dry-run";
+	/** True when the stale "layout" key was removed from settings.json. */
+	settingsUpdated: boolean;
 }
 
-/** Detect which layout a file's raw content is in. */
-export function detectTodoLayout(content: string): TodoLayout {
-	// The reader treats a leading `{` as frontmatter, so a file can only be
-	// in the footer layout when it does not start with one.
-	return content.startsWith("{") ? "frontmatter" : "footer";
+/**
+ * True when a file's raw content is already in YAML front matter form:
+ * it opens with a `---` fence and contains a closing `---` line. This
+ * mirrors the reader's fence detection so files are only rewritten when
+ * the reader would treat them as legacy too.
+ */
+export function isYamlFrontMatter(content: string): boolean {
+	if (!content.startsWith("---\n")) return false;
+	const lines = content.split("\n");
+	return lines.slice(1).some((line) => line.trimEnd() === "---");
 }
 
 async function migrateDir(
@@ -80,7 +85,7 @@ async function migrateDir(
 			continue;
 		}
 
-		if (detectTodoLayout(content) === opts.to) {
+		if (isYamlFrontMatter(content)) {
 			result.unchanged += 1;
 			continue;
 		}
@@ -94,11 +99,11 @@ async function migrateDir(
 		// while it is being rewritten underneath them.
 		const id = parseTodoFileName(entry)!.id;
 		const outcome = await withTodoLock(opts.todosDir, id, opts.ctx, async () => {
+			// Re-read under the lock in case the file changed since we
+			// sniffed its format, then write it back as YAML front matter.
 			const todo = await ensureTodoExists(filePath, id);
 			if (!todo) return { error: "unreadable" } as const;
-			// Re-read under the lock in case the file changed since we
-			// sniffed its layout, then write it back in the target layout.
-			await writeTodoFile(filePath, todo, opts.to);
+			await writeTodoFile(filePath, todo);
 			return { ok: true } as const;
 		});
 		if (typeof outcome === "object" && "error" in outcome) {
@@ -109,24 +114,45 @@ async function migrateDir(
 	}
 }
 
+async function pruneSettingsKey(
+	todosDir: string,
+	dryRun: boolean,
+): Promise<boolean> {
+	// settings.json from before the YAML cutover carries a "layout" key
+	// that no longer selects anything; drop it. Normalised settings never
+	// contain it, so rewriting is idempotent.
+	let raw: unknown;
+	try {
+		raw = JSON.parse(await fs.readFile(getTodoSettingsPath(todosDir), "utf8"));
+	} catch {
+		return false; // missing or unreadable: nothing to prune
+	}
+	if (
+		typeof raw !== "object" ||
+		raw === null ||
+		!("layout" in raw) ||
+		typeof (raw as Record<string, unknown>).layout !== "string"
+	) {
+		return false;
+	}
+	if (!dryRun) {
+		const settings = await readTodoSettings(todosDir);
+		await writeTodoSettings(todosDir, settings);
+	}
+	return true;
+}
+
 export async function migrateTodoLayout(opts: MigrateLayoutOptions): Promise<MigrateLayoutResult> {
 	const result: MigrateLayoutResult = {
 		migrated: [],
 		unchanged: 0,
 		errors: [],
-		settings: "dry-run",
+		settingsUpdated: false,
 	};
 
 	await migrateDir(opts.todosDir, opts, false, result);
 	await migrateDir(getTodoArchiveDir(opts.todosDir), opts, true, result);
-
-	// Flip settings.json last: until it changes, ordinary writes keep
-	// producing frontmatter, which the reader handles either way.
-	if (!opts.dryRun) {
-		const settings = await readTodoSettings(opts.todosDir);
-		await writeTodoSettings(opts.todosDir, { ...settings, layout: opts.to });
-		result.settings = opts.to;
-	}
+	result.settingsUpdated = await pruneSettingsKey(opts.todosDir, Boolean(opts.dryRun));
 
 	return result;
 }

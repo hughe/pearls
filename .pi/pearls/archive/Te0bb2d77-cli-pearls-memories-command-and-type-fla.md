@@ -1,20 +1,16 @@
+---
+id: e0bb2d77
+title: "CLI: pearls memories command and --type flag on create"
+tags: [memory, cli]
+status: closed
+created_at: 2026-04-30T14:32:37Z
+priority: 1
+parent: b286d44d
+slug: cli-pearls-memories-command-and-type-fla
+---
+
 # CLI: pearls memories command and --type flag on create
 
 ## Description
 
 1. Add `pearls memories` CLI command — same format as `pearls list` but filtered to type=Memory entries.\n2. Add `--type` flag to `pearls create` CLI command (e.g. `pearls create --type memory "Title" --body "Full text"`). Defaults to `todo` if not specified.
-
----
-{
-  "id": "e0bb2d77",
-  "title": "CLI: pearls memories command and --type flag on create",
-  "tags": [
-    "memory",
-    "cli"
-  ],
-  "status": "closed",
-  "created_at": "2026-04-30T14:32:37.342Z",
-  "priority": 1,
-  "parent": "b286d44d",
-  "slug": "cli-pearls-memories-command-and-type-fla"
-}

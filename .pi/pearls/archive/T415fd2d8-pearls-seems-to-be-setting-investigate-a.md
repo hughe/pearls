@@ -1,3 +1,14 @@
+---
+id: 415fd2d8
+title: Pearls seems to be setting core.bare=true. Investigate and if this is
+  true, remove it. Pearl should not be doing that.
+status: closed
+created_at: 2026-09-19T19:11:17Z
+priority: 0
+closed_at: 2026-09-19T19:15:37Z
+slug: pearls-seems-to-be-setting-investigate-a
+---
+
 # Pearls seems to be setting core.bare=true. Investigate and if this is true, remove it. Pearl should not be doing that.
 
 ## Description
@@ -11,15 +22,3 @@
 - `extensions/pearls.ts` spawns no processes — it is pure file I/O under `.pi/pearls`.
 - Verified on disk: no `.git/config` under /home/hugh/projects has `bare = true`; this repo has `core.bare=false` (untouched since May 2); `~/.gitconfig` has no bare setting; `dist/` matches source.
 - Nothing to remove. Closed as investigated-and-refuted.
-
----
-{
-  "id": "415fd2d8",
-  "title": "Pearls seems to be setting core.bare=true. Investigate and if this is true, remove it. Pearl should not be doing that.",
-  "tags": [],
-  "status": "closed",
-  "created_at": "2026-09-19T19:11:17.925Z",
-  "priority": 0,
-  "closed_at": "2026-09-19T19:15:37.231Z",
-  "slug": "pearls-seems-to-be-setting-investigate-a"
-}

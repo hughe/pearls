@@ -12,7 +12,7 @@
  *
  * Storage is handled entirely by `extensions/pearls.ts`: both sides read
  * and write the same `.pi/pearls/<id>.md` files — in either metadata
- * layout (JSON at the top, or footer) — honour PEARLS_DIR, respect lock
+ * YAML front matter format — honour PEARLS_DIR, respect lock
  * files, and share a settings.json.
  *
  * Every operation here is implemented by calling a function that already
@@ -59,7 +59,6 @@ import {
 	writeTodoFile,
 	type ArchiveClosedTodosResult,
 	type TodoFrontMatter,
-	type TodoLayout,
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { migrateTodoFilenames } from "./migrate-filenames.js";
@@ -492,13 +491,14 @@ COMMANDS
                          A legacy .pi/todos directory is moved to .pi/pearls.
                          --dry-run to preview, --force to disambiguate a
                          name that is already taken.
-  migrate-layout        Move the JSON metadata block of every pearl to the
-                         top (frontmatter, default) or the bottom (footer,
-                         after a --- separator). Takes --to <frontmatter|
-                         footer> (required) and --dry-run. Also sets the
-                         layout in settings.json so future writes match.
-                         Both layouts are always readable, so pearls keeps
-                         working during and after the switch.
+  migrate-layout        Bring every pearl up to the canonical YAML front
+                         matter format: legacy JSON metadata (a bare block
+                         at the top of the file, or a footer after a ---
+                         separator) is rewritten between --- fences.
+                         --dry-run previews. Legacy files are always
+                         readable, so the command is never required; it
+                         also drops the stale "layout" key from
+                         settings.json.
   summarize-memories   List memory index (title + ID only, no bodies).
                          --closed to include closed/stale memories.
                          Use --json for machine-readable output.
@@ -541,7 +541,7 @@ EXAMPLES
   pearls archive --days 0 --dry-run   # preview archiving all closed pearls
   pearls create "Long title here" --slug short-name
   pearls migrate-filenames --dry-run
-  pearls migrate-layout --to footer   # markdown first, JSON at the bottom
+  pearls migrate-layout                # rewrite legacy JSON pearls as YAML front matter
   PI_TODO_PATH=./todos pearls list
 `;
 
@@ -610,11 +610,14 @@ IDS AND FILENAMES
   converted with 'pearls migrate-filenames'.
 
 FILE LAYOUT
-  Each pearl is a markdown file with a JSON metadata block. By default the
-  JSON sits at the top; 'pearls migrate-layout --to footer' moves it to the
-  bottom, after a --- separator, so the human-readable text comes first.
-  Both layouts are always readable and can be mixed freely; the command
-  rewrites every pearl and updates settings.json so future writes match.
+  Each pearl is a markdown file with Obsidian-compatible YAML front
+  matter: the file opens with a --- fence, the metadata, a closing ---,
+  then the markdown body (which starts with a # Title heading; the
+  front matter title is the canonical one). Unset fields are omitted;
+  datetimes are UTC YYYY-MM-DDTHH:mm:ssZ. Two legacy layouts — a bare
+  JSON block at the top, or a JSON footer after a trailing --- line —
+  are still read indefinitely, and any write rewrites the file as YAML
+  front matter. 'pearls migrate-layout' bulk-converts a directory.
 
 ARCHIVE
   'pearls archive' moves pearls closed longer than archiveDays (gcDays is
@@ -1216,22 +1219,10 @@ async function cmdMigrateFilenames(run: RunContext): Promise<void> {
 
 // ---- migrate-layout -----------------------------------------------------
 
-function getLayoutTarget(flags: Record<string, string | boolean>): TodoLayout {
-	const raw = flags.to ?? flags.layout;
-	if (raw !== "footer" && raw !== "frontmatter") {
-		throw new CliError(
-			"migrate-layout requires --to <frontmatter|footer>",
-		);
-	}
-	return raw;
-}
-
 async function cmdMigrateLayout(run: RunContext): Promise<void> {
-	const to = getLayoutTarget(run.flags);
 	const result = await migrateTodoLayout({
 		todosDir: run.todosDir,
 		ctx: run.ctx,
-		to,
 		dryRun: Boolean(run.flags["dry-run"]),
 	});
 
@@ -1244,13 +1235,15 @@ async function cmdMigrateLayout(run: RunContext): Promise<void> {
 			out(`${entry.file}${where}\n`);
 		}
 		out(
-			`${verb} ${result.migrated.length} file(s) to ${to}, ` +
-			`${result.unchanged} already ${to}\n`,
+			`${verb} ${result.migrated.length} file(s) to YAML front matter, ` +
+			`${result.unchanged} already in YAML front matter\n`,
 		);
-		if (run.flags["dry-run"]) {
-			out(`settings.json layout would become "${to}"\n`);
-		} else {
-			out(`settings.json layout set to "${to}"\n`);
+		if (result.settingsUpdated) {
+			if (run.flags["dry-run"]) {
+				out("would remove the stale \"layout\" key from settings.json\n");
+			} else {
+				out("removed the stale \"layout\" key from settings.json\n");
+			}
 		}
 	}
 

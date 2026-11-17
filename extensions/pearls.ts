@@ -7,20 +7,25 @@
  * <id>.md and an optional <id>.lock file is used while a session is editing it.
  *
  * File format in .pi/pearls:
- * - The file starts with a JSON object (not YAML) containing the front matter:
- *   { id, title, tags, status, created_at, assigned_to_session }
- * - After the JSON block comes optional markdown body text separated by a blank line.
- * - Example:
- *   {
- *     "id": "deadbeef",
- *     "title": "Add tests",
- *     "tags": ["qa"],
- *     "status": "open",
- *     "created_at": "2026-01-25T17:00:00.000Z",
- *     "assigned_to_session": "session.json"
- *   }
+ * - The file starts with a YAML front matter block, fenced by a leading
+ *   `---` line (the very first three bytes) and a closing `---` line:
+ *   ---
+ *   id: deadbeef
+ *   title: Add tests
+ *   tags: [qa]
+ *   status: open
+ *   created_at: 2026-01-25T17:00:00Z
+ *   ---
+ *   # Add tests
  *
  *   Notes about the work go here.
+ * - Unset fields are omitted. Datetimes are UTC, formatted
+ *   YYYY-MM-DDTHH:mm:ssZ. The leading `# Title` heading is cosmetic; the
+ *   front matter title is canonical.
+ * - The reader also accepts two legacy layouts indefinitely: a bare JSON
+ *   object at the top of the file, and a JSON footer after a trailing `---`
+ *   separator line. All layouts are rewritten as YAML front matter on the
+ *   next write.
  *
  * Todo storage settings are kept in <todo-dir>/settings.json.
  * Defaults:
@@ -36,6 +41,7 @@
 import { DynamicBorder, copyToClipboard, keyHint, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { Type } from "@sinclair/typebox";
+import YAML from "yaml";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -84,7 +90,6 @@ const SLUG_FALLBACK = "untitled";
 const TODO_ARCHIVE_DIR_NAME = "archive";
 const DEFAULT_TODO_SETTINGS = {
 	archiveDays: 30,
-	layout: "frontmatter" as TodoLayout,
 };
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
@@ -117,21 +122,11 @@ interface LockInfo {
 
 export interface TodoSettings {
 	archiveDays: number;
-	layout: TodoLayout;
 }
 
 type KeybindingMatcher = {
 	matches: (keyData: string, keybindingId: string) => boolean;
 };
-
-/**
- * On-disk layout of a todo file: JSON metadata at the top (the original,
- * default layout) or at the bottom, after a `---` separator line.
- *
- * Reading always supports both layouts, so files can be migrated freely;
- * `layout` only decides what *new* writes look like.
- */
-export type TodoLayout = "frontmatter" | "footer";
 
 const TodoParams = Type.Object({
 	action: StringEnum([
@@ -775,23 +770,22 @@ function getTodosDirLabel(cwd: string): string {
 	return TODO_DIR_NAME;
 }
 
-function getTodoSettingsPath(todosDir: string): string {
+export function getTodoSettingsPath(todosDir: string): string {
 	return path.join(todosDir, TODO_SETTINGS_NAME);
 }
 
 function normalizeTodoSettings(raw: Partial<TodoSettings> & { gcDays?: number }): TodoSettings {
 	// "gcDays" is the pre-on-demand name for the archive threshold; honour
 	// it when "archiveDays" is absent so old settings files keep working.
-	// (Any "gc" key is simply ignored.)
+	// (Any "gc" or "layout" key is simply ignored — the latter was the
+	// pre-YAML on-disk layout selector, which no longer applies.)
 	const archiveDays = Number.isFinite(raw.archiveDays)
 		? raw.archiveDays
 		: Number.isFinite(raw.gcDays)
 			? raw.gcDays
 			: DEFAULT_TODO_SETTINGS.archiveDays;
-	const layout: TodoLayout = raw.layout === "footer" ? "footer" : "frontmatter";
 	return {
 		archiveDays: Math.max(0, Math.floor(archiveDays)),
-		layout,
 	};
 }
 
@@ -1111,9 +1105,9 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 	const trimmed = text.trim();
 	if (!trimmed) return data;
 
-	try {
-		const parsed = JSON.parse(trimmed) as Partial<TodoFrontMatter> | null;
-		if (!parsed || typeof parsed !== "object") return data;
+	const parsed = safeMetadataParse(trimmed);
+	if (!parsed || typeof parsed !== "object") return data;
+	{
 		if (typeof parsed.id === "string" && parsed.id) data.id = parsed.id;
 		if (typeof parsed.title === "string") data.title = parsed.title;
 		if (typeof parsed.status === "string" && parsed.status) data.status = parsed.status;
@@ -1144,11 +1138,38 @@ function parseFrontMatter(text: string, idFallback: string): TodoFrontMatter {
 		if (typeof parsed.slug === "string" && parsed.slug.trim()) {
 			data.slug = parsed.slug.trim();
 		}
-	} catch {
-		return data;
 	}
 
 	return data;
+}
+
+/**
+ * Parse raw metadata text into a plain object. Two encodings are accepted:
+ * the legacy bare-JSON block (text starts with `{`) and YAML (everything
+ * else — the text between the `---` fences of a front matter block).
+ * YAML Date scalars are normalised to ISO strings. Returns undefined on
+ * any parse failure.
+ */
+function safeMetadataParse(
+	text: string,
+): Partial<TodoFrontMatter> | null | undefined {
+	try {
+		if (text.startsWith("{")) {
+			return JSON.parse(text) as Partial<TodoFrontMatter> | null;
+		}
+		const parsed = YAML.parse(text) as Record<string, unknown> | null;
+		if (!parsed || typeof parsed !== "object") return parsed ?? null;
+		// YAML may hand back Date scalars (e.g. YAML 1.1 timestamps in a
+		// hand-edited file); normalise them so field validation sees strings.
+		for (const key of Object.keys(parsed)) {
+			if (parsed[key] instanceof Date) {
+				parsed[key] = (parsed[key] as Date).toISOString();
+			}
+		}
+		return parsed as Partial<TodoFrontMatter>;
+	} catch {
+		return undefined;
+	}
 }
 
 function findJsonObjectEnd(content: string): number {
@@ -1194,6 +1215,13 @@ function findJsonObjectEnd(content: string): number {
 }
 
 function splitFrontMatter(content: string): { frontMatter: string; body: string } {
+	// YAML front matter: the leading `---` fence is the first three bytes.
+	// Checked before anything else so a YAML file is never mistaken for a
+	// body-first (footer) file, even when its body is empty.
+	if (content.startsWith("---")) {
+		const yaml = splitYamlFrontMatter(content);
+		if (yaml) return yaml;
+	}
 	if (!content.startsWith("{")) {
 		const footer = splitFooterMatter(content);
 		if (footer) return footer;
@@ -1208,6 +1236,32 @@ function splitFrontMatter(content: string): { frontMatter: string; body: string 
 	const frontMatter = content.slice(0, endIndex + 1);
 	const body = content.slice(endIndex + 1).replace(/^\r?\n+/, "");
 	return { frontMatter, body };
+}
+
+/**
+ * Detect YAML front matter — a `---` fence as the first line of the file,
+ * closed by a later `---` line. Returns the raw text between the fences
+ * (the caller parses it) and the body after the closing fence; null when
+ * the content is not fenced, in which case other layouts are tried.
+ *
+ * A body that itself contains `---` lines is fine as long as the fences
+ * are well-formed: only the first closing fence counts.
+ */
+function splitYamlFrontMatter(
+	content: string,
+): { frontMatter: string; body: string } | null {
+	// The first line must be exactly `---`.
+	if (!content.startsWith("---\n") && content !== "---") return null;
+	const lines = content.split("\n");
+	for (let i = 1; i < lines.length; i += 1) {
+		if (lines[i].trimEnd() === "---") {
+			return {
+				frontMatter: lines.slice(1, i).join("\n"),
+				body: lines.slice(i + 1).join("\n").replace(/^(\r?\n)+/, ""),
+			};
+		}
+	}
+	return null;
 }
 
 /**
@@ -1283,35 +1337,52 @@ function parseTodoContent(content: string, idFallback: string): TodoRecord {
 	};
 }
 
-function serializeTodo(todo: TodoRecord, layout: TodoLayout = "frontmatter"): string {
-	const frontMatter = JSON.stringify(
-		{
-			id: todo.id,
-			title: todo.title,
-			tags: todo.tags ?? [],
-			status: todo.status,
-			created_at: todo.created_at,
-			assigned_to_session: todo.assigned_to_session || undefined,
-			priority: todo.priority,
-			parent: todo.parent || undefined,
-			...(todo.type && todo.type !== "todo" ? { type: todo.type } : {}),
-			...(todo.closed_at ? { closed_at: todo.closed_at } : {}),
-			...(todo.slug ? { slug: todo.slug } : {}),
-		},
-		null,
-		2,
-	);
+/**
+ * Format an ISO-ish timestamp as UTC Obsidian style: YYYY-MM-DDTHH:mm:ssZ
+ * (no milliseconds). Unparseable values pass through untouched so hand-edited
+ * junk is visible rather than silently dropped.
+ */
+function formatPearlTimestamp(iso: string): string {
+	const date = new Date(iso);
+	if (Number.isNaN(date.getTime())) return iso;
+	return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+/**
+ * Emit the YAML front matter block — the text between the `---` fences —
+ * for one pearl. Set fields only; unset ones are omitted entirely.
+ */
+function serializeYamlFrontMatter(todo: TodoRecord): string {
+	const fields: Record<string, unknown> = {};
+	fields.id = todo.id;
+	fields.title = todo.title;
+	const tags = todo.tags ?? [];
+	if (tags.length > 0) fields.tags = tags;
+	fields.status = todo.status;
+	if (todo.created_at) fields.created_at = formatPearlTimestamp(todo.created_at);
+	if (todo.priority !== undefined) fields.priority = todo.priority;
+	if (todo.parent) fields.parent = todo.parent;
+	if (todo.type && todo.type !== "todo") fields.type = todo.type;
+	if (todo.closed_at) fields.closed_at = formatPearlTimestamp(todo.closed_at);
+	if (todo.assigned_to_session) fields.assigned_to_session = todo.assigned_to_session;
+	if (todo.slug) fields.slug = todo.slug;
+
+	const doc = new YAML.Document(fields);
+	if (fields.tags) {
+		// Flow style ("tags: [a, b]") matches the canonical file format;
+		// the yaml package pads inside the brackets, so compact it below.
+		doc.get("tags", true).flow = true;
+	}
+	return String(doc).replace(/^(\S+: )\[(.*)\]$/gm, (_m, key: string, items: string) => `${key}[${items.trim()}]`);
+}
+
+function serializeTodo(todo: TodoRecord): string {
+	const frontMatter = serializeYamlFrontMatter(todo);
 
 	const body = todo.body ?? "";
 	const trimmedBody = body.replace(/^\n+/, "").replace(/\s+$/, "");
-	if (layout === "footer") {
-		// Markdown first, machine metadata tucked at the bottom after a
-		// `---` separator — the mirror image of the frontmatter layout.
-		if (!trimmedBody) return `---\n${frontMatter}\n`;
-		return `${trimmedBody}\n\n---\n${frontMatter}\n`;
-	}
-	if (!trimmedBody) return `${frontMatter}\n`;
-	return `${frontMatter}\n\n${trimmedBody}\n`;
+	if (!trimmedBody) return `---\n${frontMatter}---\n`;
+	return `---\n${frontMatter}---\n\n${trimmedBody}\n`;
 }
 
 export async function ensureTodosDir(todosDir: string) {
@@ -1323,23 +1394,11 @@ async function readTodoFile(filePath: string, idFallback: string): Promise<TodoR
 	return parseTodoContent(content, idFallback);
 }
 
-export async function writeTodoFile(
-	filePath: string,
-	todo: TodoRecord,
-	layout?: TodoLayout,
-) {
-	// Layout comes from the directory's settings.json unless the caller
-	// pins one (the layout migration does). Archived files live one level
-	// down; their settings still live in the todos root.
-	const resolved =
-		layout ??
-		(await readTodoSettings(settingsDirForFile(filePath))).layout;
-	await fs.writeFile(filePath, serializeTodo(todo, resolved), "utf8");
-}
-
-function settingsDirForFile(filePath: string): string {
-	const dir = path.dirname(path.resolve(filePath));
-	return path.basename(dir) === TODO_ARCHIVE_DIR_NAME ? path.dirname(dir) : dir;
+export async function writeTodoFile(filePath: string, todo: TodoRecord) {
+	// YAML front matter is the one canonical layout. Legacy layouts (bare
+	// JSON at the top, JSON footer) are read transparently and rewritten
+	// here on the next write — no settings knob selects anything anymore.
+	await fs.writeFile(filePath, serializeTodo(todo), "utf8");
 }
 
 export async function generateTodoId(todosDir: string): Promise<string> {
