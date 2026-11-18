@@ -1,10 +1,9 @@
 ---
 id: 8b3cd549
 title: Change the metadata format again
-status: open
+status: closed
 created_at: 2026-11-16T23:31:34Z
 priority: 0
-assigned_to_session: 01a1e6b6-9193-774b-8347-72214add64ae
 slug: change-the-metadata-format-again
 ---
 
