@@ -1017,6 +1017,88 @@ mkdir -p "$LEGACY_PROJ/.pi/todos"
 out="$(cd "$LEGACY_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
 assert_eq "$out" "$LEGACY_PROJ/.pi/pearls" ".pi/pearls is preferred over .pi/todos"
 
+section "migrate-dir (.pi/pearls -> pearls)"
+# The canonical location is <root>/pearls; .pi/pearls is a legacy location
+# still found by the walk-up search. migrate-dir moves it on demand —
+# nothing ever moves automatically. These runs cannot use the PEARLS_DIR
+# override (an explicit override never moves), so unset it and drive the
+# CLI from a scratch project directory.
+MD_PROJ="$WORK/migrate-dir-project"
+mkdir -p "$MD_PROJ/.pi/pearls"
+cat > "$MD_PROJ/.pi/pearls/Tbeef0002-hideout.md" <<'MDDIR'
+---
+id: beef0002
+title: Hideout pearl
+status: open
+created_at: 2026-01-01T00:00:00Z
+slug: hideout
+---
+
+# Hideout pearl
+MDDIR
+
+out="$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
+assert_eq "$out" "$MD_PROJ/.pi/pearls" "walk-up finds legacy .pi/pearls"
+
+out="$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-dir --dry-run)"
+assert_contains "$out" "would move directory" "dry run previews the move"
+assert_contains "$out" ".pi/pearls -> " "preview names both locations"
+[[ -f "$MD_PROJ/.pi/pearls/Tbeef0002-hideout.md" ]] && pass "dry run leaves the directory in place" \
+	|| fail "dry run leaves the directory in place"
+
+out="$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-dir)"
+assert_contains "$out" "moved directory" "migration reports the move"
+[[ -f "$MD_PROJ/pearls/Tbeef0002-hideout.md" ]] && pass "pearl file moved along with the directory" \
+	|| fail "pearl file moved along with the directory"
+[[ ! -d "$MD_PROJ/.pi/pearls" ]] && pass "legacy .pi/pearls is gone" || fail "legacy .pi/pearls is gone"
+
+out="$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
+assert_eq "$out" "$MD_PROJ/pearls" "dir resolves to pearls after migration"
+assert_contains "$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" list)" "Hideout pearl" \
+	"pearl is readable from the new location"
+out="$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-dir)"
+assert_contains "$out" "nothing to do" "second run is a no-op"
+
+# When both exist, pearls wins over a stale legacy .pi/pearls sibling.
+mkdir -p "$MD_PROJ/.pi/pearls"
+out="$(cd "$MD_PROJ" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" dir)"
+assert_eq "$out" "$MD_PROJ/pearls" "pearls is preferred over .pi/pearls"
+
+# A non-directory target is a hard error; nothing moves.
+MD_COLL="$WORK/migrate-dir-collision"
+mkdir -p "$MD_COLL/.pi/pearls"
+touch "$MD_COLL/pearls"
+out="$(cd "$MD_COLL" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-dir 2>&1)" || true
+assert_contains "$out" "not a directory" "collision with a file errors"
+got=0
+(cd "$MD_COLL" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-dir) >/dev/null 2>&1 || got=$?
+[[ "$got" -ne 0 ]] && pass "collision exits non-zero" || fail "collision exits non-zero"
+[[ -d "$MD_COLL/.pi/pearls" ]] && pass "collision leaves the legacy directory in place" \
+	|| fail "collision leaves the legacy directory in place"
+
+# An explicit PEARLS_DIR override is never moved.
+out="$(cd "$MD_COLL" && PEARLS_DIR="$MD_COLL/.pi/pearls" "${ABS_PEARLS_CMD[@]}" migrate-dir)"
+assert_contains "$out" "never moved" "PEARLS_DIR override is a no-op"
+
+# A legacy .pi/todos directory migrates straight to pearls/.
+MD_OLD="$WORK/migrate-dir-old-todos"
+mkdir -p "$MD_OLD/.pi/todos"
+cat > "$MD_OLD/.pi/todos/Tcafe0004-pre-pi.md" <<'MDOLD'
+---
+id: cafe0004
+title: Pre-pi pearl
+status: open
+created_at: 2026-01-01T00:00:00Z
+slug: pre-pi
+---
+
+# Pre-pi pearl
+MDOLD
+out="$(cd "$MD_OLD" && env -u PEARLS_DIR "${ABS_PEARLS_CMD[@]}" migrate-dir)"
+assert_contains "$out" ".pi/todos -> " "migration reports the .pi/todos hop"
+[[ -f "$MD_OLD/pearls/Tcafe0004-pre-pi.md" ]] && pass ".pi/todos pearl lands in pearls/" \
+	|| fail ".pi/todos pearl lands in pearls/"
+
 section "no automatic archiving"
 # Automatic GC was removed: nothing ever moves or vanishes on startup, no
 # matter what settings.json says — legacy "gc"/"archive" keys are simply
@@ -1308,6 +1390,7 @@ section "completions"
 out="$(pearls completions zsh)"
 assert_contains "$out" "#compdef pearls" "completions zsh prints a zsh completion script"
 assert_contains "$out" "list-tags" "completions zsh includes list-tags"
+assert_contains "$out" "migrate-dir" "completions zsh includes migrate-dir"
 assert_contains "$out" "version" "completions zsh includes version"
 assert_contains "$out" "mdv" "completions zsh includes mdv"
 assert_contains "$out" "_pearls_ids" "completions zsh completes pearl ids"

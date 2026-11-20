@@ -1,12 +1,12 @@
 // @ts-nocheck -- pearls vendored copy: type-checked in its original Pi source tree
 /**
  * This extension stores todo items as files under <todo-dir> (defaults to the
- * nearest `.pi/pearls` directory found by walking up from cwd (legacy
- * `.pi/todos` is still found), or the path in
+ * nearest `pearls` directory found by walking up from cwd (legacy
+ * `.pi/pearls` and `.pi/todos` are still found), or the path in
  * PEARLS_DIR / PI_TODO_PATH).  Each todo is a standalone markdown file named
  * <id>.md and an optional <id>.lock file is used while a session is editing it.
  *
- * File format in .pi/pearls:
+ * File format in the pearls directory:
  * - The file starts with a YAML front matter block, fenced by a leading
  *   `---` line (the very first three bytes) and a closing `---` line:
  *   ---
@@ -63,7 +63,8 @@ import {
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 
-const TODO_DIR_NAME = ".pi/pearls";
+const TODO_DIR_NAME = "pearls";
+const LEGACY_PI_PEARLS_DIR_NAME = ".pi/pearls";
 const LEGACY_TODO_DIR_NAME = ".pi/todos";
 const TODO_PATH_ENV = "PI_TODO_PATH"; // deprecated
 const PEARLS_DIR_ENV = "PEARLS_DIR";
@@ -703,14 +704,17 @@ class TodoDeleteConfirmComponent extends Container {
 }
 
 /**
- * Walk up from `start` looking for a directory that contains `.pi/pearls`
- * (falling back to the legacy `.pi/todos`). Returns the directory path if
- * found, or null if we reach the filesystem root.
+ * Walk up from `start` looking for a pearls directory. `pearls` (at the
+ * repository root) is the canonical name; `.pi/pearls` and `.pi/todos` are
+ * legacy locations the search still finds. At each ancestor the canonical
+ * name wins over a legacy one, and a nearer match always beats one further
+ * up. Returns the directory path if found, or null if we reach the
+ * filesystem root.
  */
 function findTodosDirUpward(start: string): string | null {
 	let dir = path.resolve(start);
 	while (true) {
-		for (const name of [TODO_DIR_NAME, LEGACY_TODO_DIR_NAME]) {
+		for (const name of [TODO_DIR_NAME, LEGACY_PI_PEARLS_DIR_NAME, LEGACY_TODO_DIR_NAME]) {
 			const candidate = path.join(dir, name);
 			try {
 				const stat = statSync(candidate);
@@ -749,7 +753,8 @@ export function getTodosDir(cwd: string): string {
 	throw new Error(
 		`No ${TODO_DIR_NAME} directory found in ${cwd} or any parent directory.\n` +
 		`Create one with: mkdir -p ${TODO_DIR_NAME}\n` +
-		`Or set PEARLS_DIR to the todos directory path.`,
+		`Or set PEARLS_DIR to the todos directory path.\n` +
+		`(Legacy .pi/pearls and .pi/todos directories are still found automatically.)`,
 	);
 }
 
@@ -1084,7 +1089,7 @@ export async function renameTodoFile(
 
 function getLockPath(todosDir: string, id: string): string {
 	// Keyed on the bare id, not the filename: locking must not depend on the
-	// slug being current, and .gitignore already ignores .pi/pearls/*.lock.
+	// slug being current, and .gitignore already ignores pearls/*.lock.
 	return path.join(todosDir, `${id}.lock`);
 }
 

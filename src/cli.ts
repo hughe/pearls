@@ -11,7 +11,7 @@
  * Pi being present at runtime.
  *
  * Storage is handled entirely by `extensions/pearls.ts`: both sides read
- * and write the same `.pi/pearls/<id>.md` files — in either metadata
+ * and write the same `pearls/<id>.md` files — in either metadata
  * YAML front matter format — honour PEARLS_DIR, respect lock
  * files, and share a settings.json.
  *
@@ -62,6 +62,7 @@ import {
 	type TodoRecord,
 } from "./pearls-wrapper.js";
 import { migrateTodoFilenames } from "./migrate-filenames.js";
+import { migrateTodoDir } from "./migrate-dir.js";
 import { migrateTodoLayout } from "./migrate-layout.js";
 import { ZSH_COMPLETION } from "./completions.js";
 import { endOutput, initPager, out, pagerActive } from "./output.js";
@@ -399,7 +400,8 @@ USAGE
 
 GLOBAL FLAGS
   --pearls-dir <path>    Override the todos directory (default: walk up from
-                         cwd looking for .pi/pearls, or $PEARLS_DIR).
+                         cwd looking for pearls — legacy .pi/pearls and
+                         .pi/todos are still found — or $PEARLS_DIR).
   $PEARLS_DIR            Path to the todos directory (alternative to
                          --pearls-dir).
   --todo-dir <path>      Deprecated alias for --pearls-dir.
@@ -499,6 +501,12 @@ COMMANDS
                          readable, so the command is never required; it
                          also drops the stale "layout" key from
                          settings.json.
+  migrate-dir           Move the pearls directory from its legacy .pi/pearls
+                         (or .pi/todos) location to pearls/ at the project
+                         root — the location the walk-up search prefers.
+                         Refuses when pearls/ already exists and is
+                         non-empty. --dry-run previews. Nothing ever moves
+                         automatically; this command is the only way.
   summarize-memories   List memory index (title + ID only, no bodies).
                          --closed to include closed/stale memories.
                          Use --json for machine-readable output.
@@ -542,6 +550,7 @@ EXAMPLES
   pearls create "Long title here" --slug short-name
   pearls migrate-filenames --dry-run
   pearls migrate-layout                # rewrite legacy JSON pearls as YAML front matter
+  pearls migrate-dir --dry-run         # preview moving .pi/pearls to pearls/
   PI_TODO_PATH=./todos pearls list
 `;
 
@@ -549,7 +558,7 @@ const QUICKSTART = `pearls quickstart — an agent's guide to driving the todo l
 
 WHAT THIS IS
   pearls is a CLI for a shared todo backlog living in
-  .pi/pearls/T<id>-<slug>.md, alongside memories in M<id>-<slug>.md.
+  pearls/T<id>-<slug>.md, alongside memories in M<id>-<slug>.md.
   Files are committed to the repo, so humans and agents on every checkout
   see the same list. Any agent that can run a shell command can use it.
 
@@ -619,9 +628,15 @@ FILE LAYOUT
   are still read indefinitely, and any write rewrites the file as YAML
   front matter. 'pearls migrate-layout' bulk-converts a directory.
 
+DIRECTORY
+  The backlog lives in pearls/ at the project root; the walk-up search
+  still finds legacy .pi/pearls and .pi/todos locations (and prefers
+  pearls/ whenever both exist). 'pearls migrate-dir' moves a legacy
+  directory to the canonical location; nothing ever moves automatically.
+
 ARCHIVE
   'pearls archive' moves pearls closed longer than archiveDays (gcDays is
-  a legacy alias) to .pi/pearls/archive (--days <n> overrides, --days 0
+  a legacy alias) to pearls/archive (--days <n> overrides, --days 0
   archives all closed pearls, --dry-run previews). They drop out of
   list/list-all but 'pearls get <id>' and 'pearls list-all --archived'
   still reach them. 'pearls delete' is a real delete and is still for
@@ -634,7 +649,7 @@ OUTPUT FOR AGENTS
   so any code that already parses Pi tool output works here unchanged.
 
 WHAT NOT TO DO
-  - Don't edit .pi/pearls/*.md by hand while pearls is running; the lock
+  - Don't edit pearls/*.md by hand while pearls is running; the lock
     files (.lock) coordinate concurrent writers. Renaming a file by hand is
     survivable as long as the T<hex>- / M<hex>- prefix stays intact — that
     hex is the id — but 'pearls reslug' is the safe way to do it.
@@ -794,6 +809,8 @@ async function main(argv: string[]): Promise<void> {
 			return await cmdMigrateFilenames(run);
 	case "migrate-layout":
 			return await cmdMigrateLayout(run);
+	case "migrate-dir":
+			return await cmdMigrateDir(run);
 	case "summarize-memories":
 			return await cmdSummarizeMemories(run);
 		case "refine":
@@ -1244,6 +1261,31 @@ async function cmdMigrateLayout(run: RunContext): Promise<void> {
 			} else {
 				out("removed the stale \"layout\" key from settings.json\n");
 			}
+		}
+	}
+
+	for (const err of result.errors) {
+		process.stderr.write(`pearls: ${err}\n`);
+	}
+	if (result.errors.length > 0) process.exitCode = 1;
+}
+
+// ---- migrate-dir ----------------------------------------------------------
+
+async function cmdMigrateDir(run: RunContext): Promise<void> {
+	const result = await migrateTodoDir({
+		todosDir: run.todosDir,
+		dryRun: Boolean(run.flags["dry-run"]),
+	});
+
+	if (run.json) {
+		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+	} else {
+		if (result.move) {
+			const verb = result.move.method === "dry-run" ? "would move" : "moved";
+			out(`${verb} directory ${result.move.from} -> ${result.move.to}\n`);
+		} else if (result.noopReason) {
+			out(`nothing to do: ${result.noopReason}\n`);
 		}
 	}
 

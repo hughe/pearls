@@ -54,6 +54,7 @@ When the user asks you to remember something:
 | Release a task | `pearls release <id> --json` |
 | Delete a task | `pearls delete <id> --json` |
 | Convert to YAML front matter | `pearls migrate-layout` (rewrites legacy JSON pearls; optional) |
+| Move legacy `.pi/pearls` to `pearls/` | `pearls migrate-dir` (optional; nothing moves automatically) |
 | Rename a task's file | `pearls reslug <id>` |
 | Refine a task | `pearls refine <id> --json` |
 | Create a memory | `pearls create "Title" --type memory --json --body "Full text"` |
@@ -68,12 +69,13 @@ the bare hex, the other letter, and the older `TODO-<hex>` form, so ids from
 old notes still work.
 
 On disk a todo is `T<hex>-<slug>.md` and a memory is `M<hex>-<slug>.md`,
-both under `.pi/pearls` (a legacy `.pi/todos` still works and is moved by
-`pearls migrate-filenames`). The hex is the id; the letter follows the entry's
+both under `pearls/` at the project root (legacy `.pi/pearls` and
+`.pi/todos` locations still work — `pearls migrate-dir` moves them to
+the canonical spot). The hex is the id; the letter follows the entry's
 type and the slug just makes the directory readable, derived from the title
 (override it with `--slug` when creating). Changing a title does not rename
 the file — run `pearls reslug <id>` if the user wants the filename to catch
-up. Closed pearls retire into `.pi/pearls/archive/` only when someone runs
+up. Closed pearls retire into `pearls/archive/` only when someone runs
 `pearls archive` (or the `archive` tool action) — never automatically. It
 archives pearls closed for `archiveDays` days — `gcDays` is accepted as a
 legacy alias — and `--days <n>` overrides on the command line.
@@ -266,7 +268,7 @@ pearls close <id> --json
 4. **Use --json always.** You need structured output to reason about the
    results. The human-friendly format is for terminals.
 5. **Don't edit files directly.** Always go through the `pearls` CLI.
-   The underlying `.pi/pearls/` files use lock-based coordination that
+   The underlying `pearls/` files use lock-based coordination that
    bypassing would break.
 6. **Close, don't delete.** Use `pearls close` to mark work done.
    `delete` is only for tasks created by mistake.

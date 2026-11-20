@@ -79,6 +79,7 @@ _pearls() {
 		'reslug:re-derive the filename slug from the title'
 		'migrate-filenames:rename old todo files to the current scheme'
 		'migrate-layout:convert legacy JSON pearls to YAML front matter'
+		'migrate-dir:move a legacy .pi/pearls directory to pearls/'
 		'summarize-memories:list the memory index'
 		'refine:print a refinement prompt for a todo'
 		'quickstart:print an agent-oriented guide'
@@ -202,6 +203,11 @@ _pearls() {
 				migrate-layout)
 					_arguments \\
 						'--dry-run[preview rewrites without applying]' \\
+						'--json[emit stable JSON output]'
+					;;
+				migrate-dir)
+					_arguments \\
+						'--dry-run[preview the move without applying]' \\
 						'--json[emit stable JSON output]'
 					;;
 				summarize-memories)

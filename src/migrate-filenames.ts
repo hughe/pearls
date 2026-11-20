@@ -104,7 +104,7 @@ function planDirMove(
 }
 
 /** True when `dir` sits inside a git work tree. */
-async function isGitWorkTree(dir: string): Promise<boolean> {
+export async function isGitWorkTree(dir: string): Promise<boolean> {
 	try {
 		const { stdout } = await execFileAsync("git", ["-C", dir, "rev-parse", "--is-inside-work-tree"]);
 		return stdout.trim() === "true";
@@ -144,7 +144,7 @@ function resolveTarget(
 	return { error: `no free filename for ${name}` };
 }
 
-async function movePath(
+export async function movePath(
 	dir: string,
 	from: string,
 	to: string,

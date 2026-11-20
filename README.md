@@ -14,8 +14,8 @@ terminal. If you do happen to be running Pi, its `/pearls` UI reads and
 writes the same files through the same code, so all surfaces stay in
 sync.
 
-Todos live in `.pi/pearls/T<id>-<slug>.md`, and memories — pearls created
-with `--type memory` — in `.pi/pearls/M<id>-<slug>.md` (override the
+Todos live in `pearls/T<id>-<slug>.md`, and memories — pearls created
+with `--type memory` — in `pearls/M<id>-<slug>.md` (override the
 directory with `--pearls-dir` or `$PEARLS_DIR`). The hex `<id>` is what every
 command resolves; the leading letter and the `<slug>` are derived from the
 entry's type and title purely so the directory reads well. They are intended to be **committed to the repo** so everybody
@@ -24,12 +24,14 @@ per-session `*.lock` files are gitignored.
 
 Pearls written before this scheme are named `<id>.md`. They keep working
 everywhere — an un-migrated checkout is never broken — and
-`pearls migrate-filenames` converts them. The same command moves a legacy
-`.pi/todos/` directory to `.pi/pearls/` (both locations are found by the
-walk-up search, so nothing breaks before you migrate).
+`pearls migrate-filenames` converts them. The same is true of legacy
+directory locations: a `.pi/pearls/` (or older `.pi/todos/`) directory is
+still found by the walk-up search, and `pearls migrate-dir` moves it to
+the canonical `pearls/` — nothing breaks before you migrate, and nothing
+ever moves automatically.
 
 Closed todos are not deleted when they age out: `pearls` moves them to
-`.pi/pearls/archive/`, which is committed alongside the backlog.
+`pearls/archive/`, which is committed alongside the backlog.
 
 ## Layout
 
@@ -97,8 +99,9 @@ pearls close Tdeadbeef                         # done
 
 Global flags:
 
-- `--pearls-dir <path>` — override the todos directory (default `.pi/pearls`
-  or `$PEARLS_DIR`). The flag sets `PEARLS_DIR` internally, so the
+- `--pearls-dir <path>` — override the todos directory (default `pearls`
+  found by walking up from the cwd — legacy `.pi/pearls` and `.pi/todos`
+  are still found — or `$PEARLS_DIR`). The flag sets `PEARLS_DIR` internally, so the
   resolution matches Pi exactly. `--todo-dir` is a deprecated alias.
 - `--session <id>` — identifies the caller for claim/release. Defaults to
   `$PEARLS_SESSION` or `cli:<user>@<host>`.
@@ -140,6 +143,7 @@ removed by `migrate-layout` if present.)
 | `mdv <id> [mdv-args]`   | Alias for `view`.                                                     |
 | `reslug <id>`           | Re-derive the filename slug from the current title and rename.       |
 | `migrate-filenames`     | Bring filenames up to date: legacy `<id>.md` files become `T<id>-<slug>.md`, and memories still lettered `T` become `M<id>-<slug>.md`. Also moves a legacy `.pi/todos/` directory to `.pi/pearls/`. `--dry-run` previews; `git mv` is used for tracked files so history follows. |
+| `migrate-dir`           | Move the pearls directory from its legacy `.pi/pearls/` (or `.pi/todos/`) location to the canonical `pearls/` at the project root — the location the walk-up search prefers. Refuses when `pearls/` already exists and is non-empty. `--dry-run` previews; `git mv` is used for tracked files so history follows. Nothing ever moves automatically. |
 | `migrate-layout`     | Bring every pearl up to the canonical YAML front matter format. Legacy layouts — a bare JSON metadata block at the top of the file, or a JSON footer after a trailing `---` separator — are still read indefinitely; this command bulk-rewrites them between `---` fences, and drops the stale `layout` key from `settings.json` if present. `--dry-run` previews. |
 | `quickstart`            | Print an agent-oriented guide to the typical pearls loop.            |
 | `version`               | Print the pearls version (same as `--version`).                       |
@@ -186,6 +190,11 @@ footer after a trailing `---` line — are still read indefinitely, and
 any write rewrites the file as YAML front matter. `migrate-layout`
 bulk-converts a directory (and prunes the retired `layout` key from
 `settings.json`).
+
+The directory itself lives at `pearls/` in the project root; the walk-up
+search still finds legacy `.pi/pearls/` and `.pi/todos/` locations, and
+prefers `pearls/` whenever both exist. `migrate-dir` moves a legacy
+directory to the canonical location.
 
 ## Shell completions
 
