@@ -418,6 +418,51 @@ pearls delete "TODO-$P0_ID" >/dev/null
 pearls delete "TODO-$P2_ID" >/dev/null
 pearls delete "TODO-$P4_ID" >/dev/null
 
+section "list tie breakers for roots and siblings"
+SORT_DIR="$WORK/sort-order"
+mkdir -p "$SORT_DIR/archive"
+sort_fixture() {
+	local dir="$1" id="$2" title="$3" priority="$4" date="$5" status="$6" parent="${7:-}"
+	{
+		printf '%s\n' '---' "title: $title" "priority: $priority" \
+			"created_at: ${date}T00:00:00Z" "status: $status"
+		if [[ -n "$parent" ]]; then printf 'parent: "%s"\n' "$parent"; fi
+		printf '%s\n' '---'
+	} > "$dir/T$id-fixture.md"
+}
+sort_fixture "$SORT_DIR" e0000000 Epic 0 2026-01-01 open
+for prefix in a b; do
+	parent=""
+	if [[ "$prefix" == b ]]; then parent=e0000000; fi
+	while read -r suffix title priority date; do
+		sort_fixture "$SORT_DIR" "$prefix$suffix" "$title" "$priority" "$date" open "$parent"
+	done <<'EOF'
+0000001 Alpha 1 2026-01-03
+0000002 Alpha 1 2026-01-02
+0000003 Alpha 1 2026-01-02
+0000004 Zulu  1 2026-01-01
+0000005 Zulu  0 2026-01-01
+EOF
+done
+# The two closed siblings tie on everything but ID, and the lower ID
+# starts out after the higher one when the archive is appended.
+sort_fixture "$SORT_DIR" b0000007 Aardvark 0 2026-01-01 closed e0000000
+sort_fixture "$SORT_DIR/archive" b0000006 Aardvark 0 2026-01-01 closed e0000000
+
+out="$(PEARLS_DIR="$SORT_DIR" pearls list-all --archived)"
+order="$(printf '%s\n' "$out" | grep -oE 'T[0-9a-f]{8}' | paste -sd ' ' -)"
+assert_eq "$order" \
+	"Te0000000 Tb0000005 Tb0000002 Tb0000003 Tb0000001 Tb0000004 Tb0000006 Tb0000007 Ta0000005 Ta0000002 Ta0000003 Ta0000001 Ta0000004" \
+	"roots and siblings sort by priority, title, creation time, then ID; closed siblings go last"
+
+out="$(PEARLS_DIR="$SORT_DIR" pearls list-all --archived --json)"
+order="$(printf '%s\n' "$out" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).open.map(t => t.id).join(" ")')"
+assert_eq "$order" \
+	"Te0000000 Ta0000005 Tb0000005 Ta0000002 Ta0000003 Tb0000002 Tb0000003 Ta0000001 Tb0000001 Ta0000004 Tb0000004" \
+	"JSON open bucket uses the same keys without tree grouping"
+order="$(printf '%s\n' "$out" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).closed.map(t => t.id).join(" ")')"
+assert_eq "$order" "Tb0000006 Tb0000007" "JSON closed bucket sorts active and archived pearls together"
+
 section "colorized human output"
 # These tests run piped (no tty), so the default must be plain text —
 # the bytes agents parse stay identical to the uncolorized formatter.

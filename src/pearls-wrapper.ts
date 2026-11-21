@@ -132,6 +132,8 @@ export const withTodoLock: <T>(
 	fn: () => Promise<T>,
 ) => Promise<ResultOrError<T>> = todo.withTodoLock as never;
 
+export const compareTodosForList: (a: TodoFrontMatter, b: TodoFrontMatter) => number =
+	todo.compareTodosForList;
 export const listTodos: (todosDir: string) => Promise<TodoFrontMatter[]> =
 	todo.listTodos;
 export const filterTodos: (

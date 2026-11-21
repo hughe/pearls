@@ -32,6 +32,7 @@ import {
 	archiveClosedTodos,
 	claimTodoAssignment,
 	clearAssignmentIfClosed,
+	compareTodosForList,
 	deleteTodo,
 	ensureTodoExists,
 	ensureTodosDir,
@@ -832,12 +833,10 @@ async function cmdList(
 	opts: { includeClosed: boolean },
 ): Promise<void> {
 	const allTodos = await listTodos(run.todosDir);
-	// pearls archive moves retired pearls into <todos-dir>/archive;
-	// --archived folds
-	// them back into the listing (they are closed, so they show up in the
-	// closed section).
+	// --archived merges retired pearls into the same sorted listing.
 	if (run.flags.archived) {
 		allTodos.push(...(await listTodos(getTodoArchiveDir(run.todosDir))));
+		allTodos.sort(compareTodosForList);
 	}
 	const todos = filterByTags(
 		allTodos.filter((t) => t.type !== "memory"),

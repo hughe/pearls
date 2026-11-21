@@ -286,16 +286,16 @@ export function clearAssignmentIfClosed(todo: TodoFrontMatter): void {
 	}
 }
 
-function sortTodos(todos: TodoFrontMatter[]): TodoFrontMatter[] {
-	return [...todos].sort((a, b) => {
-		const aClosed = isTodoClosed(a.status);
-		const bClosed = isTodoClosed(b.status);
-		if (aClosed !== bClosed) return aClosed ? 1 : -1;
-		const aPri = a.priority ?? Number.POSITIVE_INFINITY;
-		const bPri = b.priority ?? Number.POSITIVE_INFINITY;
-		if (aPri !== bPri) return aPri - bPri;
-		return (a.created_at || "").localeCompare(b.created_at || "");
-	});
+export function compareTodosForList(a: TodoFrontMatter, b: TodoFrontMatter): number {
+	const aClosed = isTodoClosed(a.status);
+	const bClosed = isTodoClosed(b.status);
+	if (aClosed !== bClosed) return aClosed ? 1 : -1;
+	const aPri = a.priority ?? Number.POSITIVE_INFINITY;
+	const bPri = b.priority ?? Number.POSITIVE_INFINITY;
+	if (aPri !== bPri) return aPri - bPri;
+	return a.title.localeCompare(b.title)
+		|| (a.created_at || "").localeCompare(b.created_at || "")
+		|| a.id.localeCompare(b.id);
 }
 
 function buildTodoSearchText(todo: TodoFrontMatter): string {
@@ -1533,7 +1533,7 @@ export async function listTodos(todosDir: string): Promise<TodoFrontMatter[]> {
 		}
 	}
 
-	return sortTodos(todos);
+	return todos.sort(compareTodosForList);
 }
 
 function listTodosSync(todosDir: string): TodoFrontMatter[] {
@@ -1574,7 +1574,7 @@ function listTodosSync(todosDir: string): TodoFrontMatter[] {
 		}
 	}
 
-	return sortTodos(todos);
+	return todos.sort(compareTodosForList);
 }
 
 function getTodoTitle(todo: TodoFrontMatter): string {
@@ -1634,16 +1634,6 @@ function buildTodoTree(
 	const roots: TodoFrontMatter[] = [];
 	const orphans: TodoFrontMatter[] = [];
 
-	const sortByNotClosedPriorityDate = (a: TodoFrontMatter, b: TodoFrontMatter) => {
-		const aClosed = isTodoClosed(a.status);
-		const bClosed = isTodoClosed(b.status);
-		if (aClosed !== bClosed) return aClosed ? 1 : -1;
-		const aPri = a.priority ?? Number.POSITIVE_INFINITY;
-		const bPri = b.priority ?? Number.POSITIVE_INFINITY;
-		if (aPri !== bPri) return aPri - bPri;
-		return (a.created_at || "").localeCompare(b.created_at || "");
-	};
-
 	// Collect all todos that should appear in this section:
 	//   - todos explicitly in the section
 	//   - children of parents in the section that the caller filtered out
@@ -1682,10 +1672,10 @@ function buildTodoTree(
 		}
 	}
 
-	roots.sort(sortByNotClosedPriorityDate);
-	orphans.sort(sortByNotClosedPriorityDate);
+	roots.sort(compareTodosForList);
+	orphans.sort(compareTodosForList);
 	for (const children of childrenMap.values()) {
-		children.sort(sortByNotClosedPriorityDate);
+		children.sort(compareTodosForList);
 	}
 
 	const buildNode = (todo: TodoFrontMatter, isOrphan: boolean): TodoTreeNode => ({

@@ -150,6 +150,12 @@ removed by `migrate-layout` if present.)
 | `completions <shell>`   | Print a shell completion script to stdout. Currently `zsh` (the
   default).                                                          |
 
+Lists keep the Assigned, Open, and Closed sections in that order. Within a
+section, top-level pearls sort by priority (P0–P4, then unset), title
+(A–Z), creation time (oldest first), then ID (ascending). Nested pearls
+stay under their parent; siblings use the same order, with non-closed
+siblings before closed ones.
+
 Ids are displayed as `T<hex>` for todos and `M<hex>` for memories, matching
 the letter on the file. Input is forgiving: the bare `<hex>`, either letter,
 and the older `TODO-<hex>` form are all accepted everywhere.
